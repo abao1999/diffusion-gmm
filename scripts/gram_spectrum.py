@@ -3,82 +3,92 @@ import torchvision.models as models
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 from torch.utils.data import DataLoader
-from PIL import Image
 
 from diffusion_gmm.utils import compute_gram_matrix, get_gram_spectrum
 
 import numpy as np
-import matplotlib.pyplot as plt
 from tqdm.auto import tqdm
 import os
+import argparse
+
+from diffusion_gmm.utils import plot_from_npy, plot_gram_spectrum
 
 
 WORK_DIR = os.getenv('WORK')
 DATA_DIR = os.path.join(WORK_DIR, 'vision_datasets')
 
 
-def main():
-    # Load a pre-trained model, e.g., VGG16
-    model = models.vgg16(pretrained=True).features.eval()
+def main(
+    use_generated_data: bool = True,
+    cnn_model_id: str = 'vgg16',
+    hook_layer: int = 10,
+    num_images: int = 1000,
+    verbose: bool = False,
+    save_dir: str = 'results',
+    save_name: str = 'gram_spectrum.npy',
+) -> None:
+    
+    """
+    Compute the Gram spectrum of a pre-trained CNN model on CIFAR10 data
+    TODO: Drop-in support for other datasets and models
+    """
+
+    os.makedirs(save_dir, exist_ok=True)
+
+    # Load a pre-trained model, e.g., VGG16 (models.vgg16)
+    model = getattr(models, cnn_model_id)(pretrained=True).features.eval()
 
     # Define a hook to extract features from a specific layer (e.g., after layer 10)
     features = []
-
+    
     def hook(module, input, output):
         features.append(output)
 
     # Attach the hook to a specific layer
-    model[10].register_forward_hook(hook)
+    model[hook_layer].register_forward_hook(hook)
 
-    # Define transformations
+    # Define transformations for the CIFAR10 data
     transform = transforms.Compose([
         transforms.Resize(256),
         transforms.CenterCrop(224),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
-
     # # Define transformations for the MNIST data
     # transform = transforms.Compose([
     #     transforms.ToTensor(),
     #     transforms.Normalize((0.1307,), (0.3081,))
     # ])
 
-    # Load ImageNet data (or a subset, like ImageNet's validation set)
-    # imagenet_data = datasets.ImageNet(root='path/to/imagenet', transform=transform)
-    # data = datasets.MNIST(root=os.path.join(DATA_DIR, 'mnist'), train=False, download=True, transform=transform)
+    if verbose:
+        print("Applying transformation: ", transform)
 
-    # data = datasets.CIFAR10(
-    #     root=os.path.join(DATA_DIR, 'cifar10'), 
-    #     train=False, 
-    #     download=True, 
-    #     transform=transform
-    # )
+    if use_generated_data:
+        # Load the generated CIFAR10 data from the diffusion model
+        data = datasets.ImageFolder(
+            root=os.path.join(DATA_DIR, 'generated_cifar10'),
+            transform=transform
+        )
 
-    data = datasets.ImageFolder(
-        root=os.path.join(DATA_DIR, 'generated_cifar10'),
-        transform=transform
-    )
+    else:
+        # Load the real CIFAR10 data from torchvision
+        data = datasets.CIFAR10(
+            root=os.path.join(DATA_DIR, 'cifar10'), 
+            train=False, 
+            download=True, 
+            transform=transform
+        )
 
-    # # Custom loader function to load images
-    # def pil_loader(path):
-    #     return Image.open(path).convert("RGB")
-
-    # # custom DatasetFolder class to load images from a directory without requiring class subdirectories
-    # data = datasets.DatasetFolder(
-    #     root=os.path.join(DATA_DIR, 'generated_cifar10'), 
-    #     loader=pil_loader, 
-    #     extensions=('png', 'jpg', 'jpeg'), 
-    #     transform=transform
-    # )
-
-    # keep batch_size=1 because we are interested in the Gram matrix of a single image
     dataloader = DataLoader(data, batch_size=1, shuffle=True)
 
     # Accumulate eigenvalues from all images
     all_eigenvalues = []
 
-    for i, (images, _) in tqdm(enumerate(dataloader)):
+    for idx, (images, _) in tqdm(enumerate(dataloader)):
+        # Limit to the first n_images images for demonstration purposes
+        if idx == num_images:
+            break
+
         features.clear()  # Clear previous features
         with torch.no_grad():
             model(images)  # Forward pass through the model
@@ -88,40 +98,68 @@ def main():
             gram_matrix = compute_gram_matrix(features[0].squeeze())
             spectrum = get_gram_spectrum(gram_matrix)
             all_eigenvalues.extend(spectrum.cpu().numpy())
-        
-        # Limit to the first _ images for demonstration purposes
-        if i == 999:
-            break
 
     # Convert accumulated eigenvalues to a numpy array
     all_eigenvalues = np.array(all_eigenvalues)
-    print("all_eigenvalues shape: ", all_eigenvalues.shape)
+    if verbose:
+        print("all_eigenvalues shape: ", all_eigenvalues.shape)
     # save computed eigenvalues to a file
-    np.save(f"gram_spectrum.npy", all_eigenvalues)
+    np.save(os.path.join(save_dir, save_name), all_eigenvalues)
+    # np.save(f"gram_spectrum.npy", all_eigenvalues)
 
-    # Plotting the histogram of density versus eigenvalue
-    plt.figure(figsize=(10, 6))
-    plt.hist(all_eigenvalues, bins='fd', density=True, alpha=0.75, color='tab:blue')
-    plt.xlabel('Eigenvalue')
-    plt.ylabel('Density')
-    plt.yscale('log')
-    plt.title('Eigenvalues of Gram Matrices')
-    plt.grid(True)
-    plt.savefig('gram_spectrum.png', dpi=300)
-
-# plot histogram from npy file
-def plot_gram_spectrum(filepath: str = 'gram_spectrum.npy'):
-    print(f"Loading eigenvalues from file {filepath}")
-    all_eigenvalues = np.load(filepath)
-    plt.figure(figsize=(10, 6))
-    plt.hist(all_eigenvalues, bins=100, density=True, alpha=0.75, color='tab:blue')
-    plt.xlabel('Eigenvalue')
-    plt.ylabel('Density')
-    plt.yscale('log')
-    plt.title('Eigenvalues of Gram Matrices')
-    plt.grid(True)
-    plt.savefig('gram_spectrum.png', dpi=300)
 
 if __name__ == "__main__":
-    # main()
-    plot_gram_spectrum()
+    parser = argparse.ArgumentParser(description='Compute the Gram spectrum of a pre-trained CNN model on CIFAR10 data')
+    parser.add_argument('--generated', action='store_true', help='Use generated CIFAR10 data from the diffusion model')
+    parser.add_argument('--cnn_model', type=str, default='vgg16', help='Pre-trained CNN model ID')
+    parser.add_argument('--hook_layer', type=int, default=10, help='Layer to extract features from')
+    parser.add_argument('--num_images', type=int, default=1000, help='Number of images to process')
+    args = parser.parse_args()
+
+    # TODO: this is currently hard-coded
+    diffusion_model = 'ddpm' 
+    dataset = 'cifar10'
+    
+    cnn_model_id = args.cnn_model
+    hook_layer = args.hook_layer
+    num_images = args.num_images
+    use_generated_data = args.generated
+    
+    # book-keeping for save names
+    npy_save_dir = 'results'
+    npy_save_name = f"{dataset}_gram_spectrum.npy"
+    figs_save_dir = 'figs'
+    fig_save_name = f"{dataset}_gram_spectrum.png"
+
+    if use_generated_data:
+        npy_save_name = f"{diffusion_model}_{npy_save_name}"
+        fig_save_name = f"{diffusion_model}_{fig_save_name}"
+    
+    npy_path = os.path.join(npy_save_dir, npy_save_name)
+
+    # if npy file doesnt already exist, compute and save it
+    if not os.path.exists(npy_path):
+        print("Computing and saving Gram spectrum...")
+        main(
+            use_generated_data=use_generated_data,
+            cnn_model_id=cnn_model_id,
+            hook_layer=hook_layer,
+            num_images=num_images,
+            verbose=True,
+            save_dir=npy_save_dir,
+            save_name=npy_save_name
+        )
+    else:
+        print(f"Loading Gram spectrum from file: {npy_path}")
+
+    plot_from_npy(
+        filepath=npy_path, 
+        plot_fn=plot_gram_spectrum,
+        verbose=True,
+        plot_kwargs={
+            'bins': 100,
+            'density': True,
+            'save_dir': figs_save_dir,
+            'save_name': fig_save_name,
+        }
+    )

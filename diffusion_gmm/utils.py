@@ -1,6 +1,9 @@
 import torch
 import numpy as np
+import os
 import matplotlib.pyplot as plt
+from typing import Callable, Union
+
 
 # Function to compute the Gram matrix
 def compute_gram_matrix(features: np.ndarray) -> np.ndarray:
@@ -15,6 +18,49 @@ def get_gram_spectrum(gram_matrix):
     eigenvalues = torch.linalg.eigvals(gram_matrix)
     # Return the real part of the eigenvalues
     return eigenvalues.real
+
+
+# plot histogram from npy file
+def plot_gram_spectrum(
+    all_eigenvalues: np.ndarray, 
+    verbose: bool = False,
+    bins: Union[int, str] = 100, # 'fd' for Freedman-Diaconis rule
+    density: bool = True,
+    save_dir: str = 'figs',
+    save_name: str = 'gram_spectrum.png'
+) -> None:
+    os.makedirs(save_dir, exist_ok=True)
+    if verbose:
+        print()
+    plt.figure(figsize=(10, 6))
+    plt.hist(
+        all_eigenvalues, 
+        bins=bins, 
+        density=density, 
+        alpha=0.75, 
+        color='tab:blue'
+    )
+    plt.xlabel('Eigenvalue')
+    plt.ylabel('Density')
+    plt.yscale('log')
+    plt.title('Eigenvalues of Gram Matrices')
+    plt.grid(True)
+    plt.savefig(os.path.join(save_dir, save_name), dpi=300)
+    print("Saved histogram to ", os.path.join(save_dir, save_name))
+
+# plot histogram from npy file
+def plot_from_npy(
+    filepath: str = 'gram_spectrum.npy',
+    plot_fn: Callable[[np.ndarray], None] = plot_gram_spectrum,
+    verbose: bool = False,
+    plot_kwargs: dict = {}
+):
+    all_data = np.load(filepath)
+    if verbose:
+        print(f"Loaded data from file {filepath}")
+        print("data shape: ", all_data.shape)
+    plot_fn(all_data, verbose=verbose, **plot_kwargs)
+
 
 
 import PIL.Image

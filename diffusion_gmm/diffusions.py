@@ -140,74 +140,90 @@ def generate_ddpm(
             img.save(os.path.join(save_fig_dir, f"another_ddpm_cifar10_sample_{i}.png"))
 
 from diffusers import DiffusionPipeline
-def ldm_pipeline():
+def ldm_pipeline(
+    prompt: str = "A painting of a squirrel eating a burger",
+    num_inference_steps: int = 50,
+    guidance_scale: float = 6,
+    save_fig_dir: str = "figs",
+    device: str = 'cpu'
+) -> None:
+    """
+    Generate images using the Large Diffusion Model from the Hugging Face Hub
+    """
     # load model and scheduler
-    ldm = DiffusionPipeline.from_pretrained("CompVis/ldm-text2im-large-256")
+    pipeline = DiffusionPipeline.from_pretrained("CompVis/ldm-text2im-large-256")
+    pipeline = pipeline.to(device)
 
     # run pipeline in inference (sample random noise and denoise)
     prompt = "A painting of a squirrel eating a burger"
-    images = ldm([prompt], num_inference_steps=50, eta=0.3, guidance_scale=6).images
+    images = pipeline(
+        [prompt], 
+        num_inference_steps=num_inference_steps, 
+        eta=0.3, 
+        guidance_scale=guidance_scale
+    ).images
 
     # save images
     for idx, image in enumerate(images):
-        image.save(f"squirrel-{idx}.png")
+        image.save(os.path.join(save_fig_dir, f"ldm_256_sample_{idx}.png"))
 
 
-# from diffusers import DiffusionPipeline
-# from transformers import CLIPTokenizer, CLIPTextModel
-# from PIL import Image
-
-# def generate_image_from_imagenet_class(
-#     class_description: str,
-#     num_inference_steps: int = 50,
-#     guidance_scale: float = 7.5,
-#     height: int = 512,
-#     width: int = 512,
-#     seed: int = None
-# ) -> Image.Image:
-#     """
-#     Generate an image based on an ImageNet class description using a text-to-image diffusion model.
+def generate_image_DiffusionPipe(
+    model_id: str = "CompVis/stable-diffusion-v1-4",
+    num_inference_steps: int = 50,
+    guidance_scale: float = 7.5,
+    height: int = 512,
+    width: int = 512,
+    prompt: Optional[str] = None, # "A photo of a cat, realistic style",
+    seed: Optional[int] = None,
+    num_images: int = 1,
+    save_fig_dir: str = "figs",
+    save_grid_shape: Optional[Tuple[int, int]] = None
+) -> None:
+    """
+    Generate images based on ImageNet class descriptions using a text-to-image diffusion model.
     
-#     Args:
-#     class_description (str): A text description of the ImageNet class.
-#     num_inference_steps (int): Number of denoising steps (default: 50).
-#     guidance_scale (float): Scale for classifier-free guidance (default: 7.5).
-#     height (int): Height of the image (default: 512).
-#     width (int): Width of the image (default: 512).
-#     seed (int): Random seed for reproducibility (default: None).
+    Args:
+        model_id (str): The model ID of the pretrained text-to-image diffusion model (default: "CompVis/stable-diffusion-v1-4").
+        num_inference_steps (int): Number of denoising steps (default: 50).
+        guidance_scale (float): Scale for classifier-free guidance (default: 7.5).
+        height (int): Height of the image (default: 512).
+        width (int): Width of the image (default: 512).
+        prompt (Optional[str]): A text description of the ImageNet class.
+        seed (Optional[int]): Random seed for reproducibility (default: None).
+        num_images (int): Number of images to generate (default: 1).
+        save_fig_dir (str): Directory to save the generated images (default: "figs").
+        save_grid_shape (Optional[Tuple[int, int]]): Shape of the grid to save the images as a grid (default: None). 
+    """
     
-#     Returns:
-#     PIL.Image.Image: The generated image.
-#     """
+    # Load the pretrained model
+    pipeline = DiffusionPipeline.from_pretrained(model_id)
     
-#     # Load the pretrained model
-#     model_id = "CompVis/stable-diffusion-v1-4"
-#     pipe = DiffusionPipeline.from_pretrained(model_id)
+    # Move the pipeline to GPU if available
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    pipeline = pipeline.to(device)
     
-#     # Move the pipeline to GPU if available
-#     device = "cuda" if torch.cuda.is_available() else "cpu"
-#     pipe = pipe.to(device)
-    
-#     # Set the random seed if provided
-#     if seed is not None:
-#         torch.manual_seed(seed)
+    # Set the random seed if provided
+    if seed is not None:
+        torch.manual_seed(seed)
         
-#     # Generate the image
-#     prompt = f"A photo of {class_description}, high quality, detailed"
-#     image = pipe(
-#         prompt=prompt,
-#         num_inference_steps=num_inference_steps,
-#         guidance_scale=guidance_scale,
-#         height=height,
-#         width=width
-#     ).images[0]
-    
-#     return image
+    # Generate the images
+    image_samples = pipeline(
+        prompt=prompt,
+        num_inference_steps=num_inference_steps,
+        guidance_scale=guidance_scale,
+        height=height,
+        width=width,
+        num_images=num_images
+    ).images
 
-# # Example usage
-# if __name__ == "__main__":
-#     # Example: Generate an image of a panda
-#     class_description = "a panda eating bamboo"
-#     generated_image = generate_image_from_imagenet_class(class_description)
-#     generated_image.save("generated_panda.png")
-#     print(f"Generated image saved as 'generated_panda.png'")
+    # Save the generated images
+    if save_grid_shape is not None:
+        save_images_grid(
+            image_samples, 
+            os.path.join(save_fig_dir, "generated_sample_grid.png"), 
+            grid_shape=save_grid_shape
+        )
+    else:
+        for i, image in enumerate(image_samples):
+            image.save(os.path.join(save_fig_dir, f"generated_sample_{i}.png"))
