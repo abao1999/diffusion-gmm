@@ -221,9 +221,9 @@ def generate_image_DiffusionPipe(
     if save_grid_shape is not None:
         save_images_grid(
             image_samples, 
-            os.path.join(save_fig_dir, "generated_sample_grid.png"), 
+            os.path.join(save_fig_dir, "diffusion_sample_grid.png"), 
             grid_shape=save_grid_shape
         )
     else:
         for i, image in enumerate(image_samples):
-            image.save(os.path.join(save_fig_dir, f"generated_sample_{i}.png"))
+            image.save(os.path.join(save_fig_dir, f"diffusion_sample_{i}.png"))

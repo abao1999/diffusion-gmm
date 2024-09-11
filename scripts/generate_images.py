@@ -26,13 +26,13 @@ if __name__ == "__main__":
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
 
-    save_dir = os.path.join(DATA_DIR, "generated_cifar10", "unknown")
+    save_dir = os.path.join(DATA_DIR, "diffusion_cifar10", "unknown")
 
     # generate_sb3(device=device)
     # # generate_ddpm(
     # generate_ddpm_exposed(
     #     num_inference_steps=50,
-    #     num_images=1000,
+    #     num_images=1024,
     #     save_grid_shape=None,
     #     save_fig_dir=save_dir,
     #     device=device,

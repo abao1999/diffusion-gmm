@@ -19,10 +19,10 @@ DATA_DIR = os.path.join(WORK_DIR, 'vision_datasets')
 
 
 def main(
-    use_generated_data: bool = True,
+    mode: str,
     cnn_model_id: str = 'vgg16',
     hook_layer: int = 10,
-    num_images: int = 1000,
+    num_images: int = 1024,
     verbose: bool = False,
     save_dir: str = 'results',
     save_name: str = 'gram_spectrum.npy',
@@ -63,14 +63,21 @@ def main(
     if verbose:
         print("Applying transformation: ", transform)
 
-    if use_generated_data:
+    if mode == "diffusion":
         # Load the generated CIFAR10 data from the diffusion model
         data = datasets.ImageFolder(
-            root=os.path.join(DATA_DIR, 'generated_cifar10'),
+            root=os.path.join(DATA_DIR, 'diffusion_cifar10'),
+            transform=transform
+        )
+    
+    elif mode == "gmm":
+        # Load the generated CIFAR10 data from the GMM model
+        data = datasets.ImageFolder(
+            root=os.path.join(DATA_DIR, 'gmm_cifar10'),
             transform=transform
         )
 
-    else:
+    elif mode == "real":
         # Load the real CIFAR10 data from torchvision
         data = datasets.CIFAR10(
             root=os.path.join(DATA_DIR, 'cifar10'), 
@@ -78,7 +85,10 @@ def main(
             download=True, 
             transform=transform
         )
-
+    
+    else:
+        raise ValueError(f"Invalid mode: {mode}")
+    
     dataloader = DataLoader(data, batch_size=1, shuffle=True)
 
     # Accumulate eigenvalues from all images
@@ -110,38 +120,48 @@ def main(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Compute the Gram spectrum of a pre-trained CNN model on CIFAR10 data')
-    parser.add_argument('--generated', action='store_true', help='Use generated CIFAR10 data from the diffusion model')
+    # parser.add_argument('--generated', action='store_true', help='Use generated CIFAR10 data from the diffusion model')
+    # add argument to take one of three modes: real, diffusion, or gmm
+    parser.add_argument('mode', type=str, help='Mode to run in: real, diffusion, or gmm')
     parser.add_argument('--cnn_model', type=str, default='vgg16', help='Pre-trained CNN model ID')
     parser.add_argument('--hook_layer', type=int, default=10, help='Layer to extract features from')
-    parser.add_argument('--num_images', type=int, default=1000, help='Number of images to process')
+    parser.add_argument('--num_images', type=int, default=1024, help='Number of images to process')
     args = parser.parse_args()
 
     # TODO: this is currently hard-coded
-    diffusion_model = 'ddpm' 
     dataset = 'cifar10'
     
     cnn_model_id = args.cnn_model
     hook_layer = args.hook_layer
     num_images = args.num_images
-    use_generated_data = args.generated
+    mode = args.mode
     
     # book-keeping for save names
     npy_save_dir = 'results'
-    npy_save_name = f"{dataset}_gram_spectrum.npy"
     figs_save_dir = 'figs'
+
+    npy_save_name = f"{dataset}_gram_spectrum.npy"
     fig_save_name = f"{dataset}_gram_spectrum.png"
 
-    if use_generated_data:
+    if mode == "diffusion":
+        diffusion_model = 'ddpm' 
         npy_save_name = f"{diffusion_model}_{npy_save_name}"
         fig_save_name = f"{diffusion_model}_{fig_save_name}"
-    
+    elif mode == "gmm":
+        npy_save_name = f"gmm_{npy_save_name}"
+        fig_save_name = f"gmm_{fig_save_name}"
+    elif mode == "real":
+        pass
+    else:
+        raise ValueError(f"Invalid mode: {mode}")
+
     npy_path = os.path.join(npy_save_dir, npy_save_name)
 
     # if npy file doesnt already exist, compute and save it
-    if not os.path.exists(npy_path):
+    if True: # not os.path.exists(npy_path):
         print("Computing and saving Gram spectrum...")
         main(
-            use_generated_data=use_generated_data,
+            mode,
             cnn_model_id=cnn_model_id,
             hook_layer=hook_layer,
             num_images=num_images,
