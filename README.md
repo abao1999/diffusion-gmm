@@ -35,6 +35,9 @@ To compute the gram matrix spectrum for the GMM samples fit on the real data, ru
 
 Once all npy files have been saved, the spectra can be plotted together with `python scripts/plot_spectra.py`.
 
+## Tests
+To inspect an image from a dataset, run [test_image.py](tests/test_image.py).
+
 ## TODOS
 - Fix and verify scaling for GMM
 - Ensure consistent data processing for all modes

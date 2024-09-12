@@ -47,24 +47,11 @@ def main(
     # Attach the hook to a specific layer
     model[hook_layer].register_forward_hook(hook)
 
-    # Define transformations for the CIFAR10 data
-    # transform_normalized = transforms.Compose([
-    #     transforms.Resize(256),
-    #     transforms.CenterCrop(224),
-    #     transforms.ToTensor(),
-    #     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    # ])
     transform = transforms.Compose([
         # transforms.Resize(256),
         # transforms.CenterCrop(224),
         transforms.ToTensor(),
     ])
-
-    # # Define transformations for the MNIST data
-    # transform = transforms.Compose([
-    #     transforms.ToTensor(),
-    #     transforms.Normalize((0.1307,), (0.3081,))
-    # ])
 
     if verbose:
         print("Applying transformation: ", transform)
@@ -127,6 +114,7 @@ def main(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Compute the Gram spectrum of a pre-trained CNN model on CIFAR10 data')
     parser.add_argument('mode', type=str, help='Mode to run in: real, diffusion, or gmm')
+    parser.add_argument('--overwrite', action='store_true', help='Overwrite existing npy file')
     parser.add_argument('--cnn_model', type=str, default='vgg16', help='Pre-trained CNN model ID')
     parser.add_argument('--hook_layer', type=int, default=10, help='Layer to extract features from')
     parser.add_argument('--num_images', type=int, default=1024, help='Number of images to process')
@@ -162,7 +150,7 @@ if __name__ == "__main__":
     npy_path = os.path.join(npy_save_dir, npy_save_name)
 
     # if npy file doesnt already exist, compute and save it
-    if True: # not os.path.exists(npy_path):
+    if not os.path.exists(npy_path) or args.overwrite:
         print("Computing and saving Gram spectrum...")
         main(
             mode,
