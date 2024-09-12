@@ -6,12 +6,18 @@ from diffusion_gmm.diffusions import (
     generate_sb2,
     ldm_pipeline,
 )
+import argparse
 
 FIGS_DIR = "figs"
 WORK_DIR = os.getenv("WORK")
 DATA_DIR = os.path.join(WORK_DIR, "vision_datasets")
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--steps", type=int, default=50)
+    parser.add_argument("--n_samples", type=int, default=1024)
+    args = parser.parse_args()
+
     os.makedirs(FIGS_DIR, exist_ok=True)
     torch.manual_seed(0)
     # If using CUDA, you should also set the seed for CUDA for full reproducibility
@@ -31,8 +37,8 @@ if __name__ == "__main__":
     # generate_sb3(device=device)
     # generate_ddpm(
     generate_ddpm_exposed(
-        num_inference_steps=50,
-        num_images=1024*4,
+        num_inference_steps=args.steps,
+        num_images=args.n_samples,
         save_grid_shape=None,
         save_fig_dir=save_dir,
         device=device,
