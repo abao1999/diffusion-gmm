@@ -22,15 +22,21 @@ In the [scripts](scripts/) directory, we provide a script [sample_gmm.py](script
 In the [scripts](scripts/) directory, we provide a script [gram_spectrum.py](scripts/gram_spectrum.py) to compute all eigenvalues of the gram matrices created from the specified samples from a chosen dataset (real `cifar10` images, Diffusion generated images, GMM samples). All eigenvalues are saved into npy files in a specified directory, for downsteam analysis.
 
 To compute the gram matrix spectrum for the real `cifar10` data, run:
+
 `python scripts/gram_spectrum.py real --num_images 1024`
 
 To compute the gram matrix spectrum for the Diffusion generated data, run:
+
 `python scripts/gram_spectrum.py diffusion --num_images 1024`
 
 To compute the gram matrix spectrum for the GMM samples fit on the real data, run:
+
 `python scripts/gram_spectrum.py gmm --num_images 1024`
+
+Once all npy files have been saved, the spectra can be plotted together with `python scripts/plot_spectra.py`.
 
 ## TODOS
 - Fix and verify scaling for GMM
 - Ensure consistent data processing for all modes
 - Tests to compute and compare sample statistics
+- Interpretation
