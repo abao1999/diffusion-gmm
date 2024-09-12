@@ -26,6 +26,8 @@ class ImageGMM():
         self.n_components = n_components
         self.verbose = verbose
         self.gmm = GaussianMixture(n_components=n_components, covariance_type='full')
+        self.mean = None # to be set after fitting
+        self.covariance = None # to be set after fitting
 
     # Function to compute mean and covariance matrix from dataset
     def _compute_mean_and_covariance(
@@ -58,6 +60,9 @@ class ImageGMM():
         # Compute the mean and covariance
         mean = np.mean(all_pixels, axis=0)
         covariance = np.cov(all_pixels, rowvar=False)
+
+        self.mean = mean
+        self.covariance = covariance
         
         return mean, covariance
 
@@ -74,7 +79,11 @@ class ImageGMM():
         """
         # Computed mean and covariance of samples from image loader, to use for fitting gmm
         mean, covariance = self._compute_mean_and_covariance(n_samples_compute_stats)
-
+        print("mean: ", mean)
+        print("covariance: ", covariance)
+        print("mean mean: ", np.mean(mean))
+        print("mean covariance: ", np.mean(covariance))
+        
         if self.verbose:
             print(f"Fitting GMM with {self.n_components} components and {n_samples_fit} samples...")
             print("Mean shape:", mean.shape)
@@ -133,11 +142,13 @@ class ImageGMM():
                 grid_shape=save_grid_shape,
             )
         else:
-            samples = np.clip(samples, -1, 1)
-            samples = ((samples + 1) / 2) * 255
-            samples = samples.astype(np.uint8)
+            # processed_samples = np.clip(samples, -1, 1)
+            # processed_samples = ((processed_samples + 1) / 2) * 255
+            # processed_samples = processed_samples.astype(np.uint8)
             for i, img in tqdm(enumerate(samples)):
                 img = np.transpose(img, (1, 2, 0))  # Reorder dimensions to HWC
-                # img = (img * 255).astype(np.uint8)  # Convert to uint8
+                img = (img * 255).astype(np.uint8)  # Convert to uint8
                 img = Image.fromarray(img)
                 img.save(os.path.join(save_fig_dir, f"{save_name}_sample_{i}.png"))
+        
+        return samples

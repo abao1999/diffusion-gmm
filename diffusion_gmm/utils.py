@@ -4,21 +4,27 @@ import os
 import matplotlib.pyplot as plt
 from typing import Callable, Union, Tuple
 import PIL.Image
+from tqdm import tqdm, trange
+
 
 # Function to compute the Gram matrix
 def compute_gram_matrix(features: np.ndarray) -> np.ndarray:
-    c, h, w = features.shape
-    features = features.view(c, h * w)
-    gram_matrix = torch.mm(features, features.t())
+    b, c, h, w = features.shape
+    features = features.reshape(b, c, h * w)
+    gram_matrix = np.matmul(features, features.transpose(0, 2, 1))
+    # features = features.view(b, c, h * w)
+    # gram_matrix = torch.bmm(features, features.transpose(1, 2))
     return gram_matrix
 
 # Function to get eigenvalues of the Gram matrix
-def get_gram_spectrum(gram_matrix):
-    # Compute the eigenvalues (complex values) of the Gram matrix
-    eigenvalues = torch.linalg.eigvals(gram_matrix)
-    # Return the real part of the eigenvalues
-    return eigenvalues.real
-
+def get_gram_spectrum(gram_matrix: np.ndarray) -> np.ndarray:
+    # Compute the eigenvalues (complex values) of each Gram matrix in the batch
+    eigenvalues = np.linalg.eigvals(gram_matrix)
+    # Extract the real part of the eigenvalues
+    real_eigenvalues = eigenvalues.real
+    # Flatten the eigenvalues to form a 1D array
+    all_eigenvalues = real_eigenvalues.flatten()
+    return all_eigenvalues
 
 # plot histogram from npy file
 def plot_gram_spectrum(
@@ -89,6 +95,8 @@ def save_images_grid(
     assert n >= grid_shape[0] * grid_shape[1], "you have fewer images than grid spaces!"
 
     new_im = PIL.Image.new('RGB', (n_rows, n_cols))
+
+    images = np.clip(images, -1, 1)
 
     idx = 0
     for i in range(0, n_rows, w):

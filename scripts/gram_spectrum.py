@@ -2,7 +2,7 @@ import torch
 import torchvision.models as models
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, SubsetRandomSampler, RandomSampler
 
 from diffusion_gmm.utils import compute_gram_matrix, get_gram_spectrum
 
@@ -48,12 +48,18 @@ def main(
     model[hook_layer].register_forward_hook(hook)
 
     # Define transformations for the CIFAR10 data
+    # transform_normalized = transforms.Compose([
+    #     transforms.Resize(256),
+    #     transforms.CenterCrop(224),
+    #     transforms.ToTensor(),
+    #     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    # ])
     transform = transforms.Compose([
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
+        # transforms.Resize(256),
+        # transforms.CenterCrop(224),
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
+
     # # Define transformations for the MNIST data
     # transform = transforms.Compose([
     #     transforms.ToTensor(),
@@ -89,25 +95,25 @@ def main(
     else:
         raise ValueError(f"Invalid mode: {mode}")
     
-    dataloader = DataLoader(data, batch_size=1, shuffle=True)
+    custom_sampler = RandomSampler(data, replacement=False, num_samples=num_images)
+    # custom_sampler = SubsetRandomSampler(range(num_images))
+    dataloader = DataLoader(data, batch_size=64, shuffle=False, sampler=custom_sampler)
 
     # Accumulate eigenvalues from all images
     all_eigenvalues = []
 
     for idx, (images, _) in tqdm(enumerate(dataloader)):
-        # Limit to the first n_images images for demonstration purposes
-        if idx == num_images:
-            break
 
         features.clear()  # Clear previous features
         with torch.no_grad():
             model(images)  # Forward pass through the model
         
         if features:
-            # print("number of features: ", len(features))
-            gram_matrix = compute_gram_matrix(features[0].squeeze())
+            # use first features from from hook
+            feats = features[0].squeeze().cpu().numpy()
+            gram_matrix = compute_gram_matrix(feats)
             spectrum = get_gram_spectrum(gram_matrix)
-            all_eigenvalues.extend(spectrum.cpu().numpy())
+            all_eigenvalues.extend(spectrum)
 
     # Convert accumulated eigenvalues to a numpy array
     all_eigenvalues = np.array(all_eigenvalues)
@@ -120,8 +126,6 @@ def main(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Compute the Gram spectrum of a pre-trained CNN model on CIFAR10 data')
-    # parser.add_argument('--generated', action='store_true', help='Use generated CIFAR10 data from the diffusion model')
-    # add argument to take one of three modes: real, diffusion, or gmm
     parser.add_argument('mode', type=str, help='Mode to run in: real, diffusion, or gmm')
     parser.add_argument('--cnn_model', type=str, default='vgg16', help='Pre-trained CNN model ID')
     parser.add_argument('--hook_layer', type=int, default=10, help='Layer to extract features from')

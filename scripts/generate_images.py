@@ -29,19 +29,19 @@ if __name__ == "__main__":
     save_dir = os.path.join(DATA_DIR, "diffusion_cifar10", "unknown")
 
     # generate_sb3(device=device)
-    # # generate_ddpm(
-    # generate_ddpm_exposed(
-    #     num_inference_steps=50,
-    #     num_images=1024,
-    #     save_grid_shape=None,
-    #     save_fig_dir=save_dir,
-    #     device=device,
-    # )
-
-    ldm_pipeline(
+    # generate_ddpm(
+    generate_ddpm_exposed(
         num_inference_steps=50,
-        num_images=2,
+        num_images=1024*4,
         save_grid_shape=None,
         save_fig_dir=save_dir,
         device=device,
     )
+
+    # ldm_pipeline(
+    #     num_inference_steps=50,
+    #     num_images=2,
+    #     save_grid_shape=None,
+    #     save_fig_dir=save_dir,
+    #     device=device,
+    # )
