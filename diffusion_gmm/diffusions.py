@@ -2,11 +2,74 @@ import torch
 import numpy as np
 import os
 from tqdm.auto import tqdm
-from PIL import Image
 from typing import Optional, Tuple
 
-from diffusion_gmm.utils import save_images_grid
+from diffusion_gmm.utils import save_images_grid, save_and_plot_samples
 
+
+from diffusers import DDIMPipeline #, DDPMPipeline
+def generate_ddpm_exposed(
+    num_inference_steps: int,
+    num_images: int,
+    save_dir: str,
+    plot_kwargs: dict = {},
+    device='cpu',
+) -> np.ndarray:
+    """
+    Generate images using the DDPM model from the Hugging Face Hub
+    NOTE: can also drop-in replace with DDPM model
+    This differs from generate_ddpm solely in that we expose the components more here
+
+    Args:
+        num_inference_steps (int): Number of inference steps to refine the samples
+        num_images (int): Number of images to generate
+        save_dir (str): Directory to save the generated images
+        plot_kwargs (dict): Keyword arguments for saving and plotting the images
+        device (str): Device to use for inference (default: 'cpu')
+
+    """
+    # Hugging Face hub directory from which we get the pre-trained CIFAR10 DDPM model's config
+    model_id = "google/ddpm-cifar10-32"
+    print("Model ID:", model_id)
+
+    # Load the DDPM pipeline with the correct model and scheduler
+    pipeline = DDIMPipeline.from_pretrained(model_id, torch_dtype=torch.float16)
+    pipeline = pipeline.to(device)  # Move to the specified device
+
+    # Generate a random initial sample in float16 to match the model's precision
+    samples = torch.randn(
+        num_images,
+        pipeline.unet.config.in_channels,
+        pipeline.unet.config.sample_size,
+        pipeline.unet.config.sample_size,
+        dtype=torch.float16
+    ).to(device)
+
+    # Set the number of inference steps
+    pipeline.scheduler.set_timesteps(num_inference_steps=num_inference_steps)
+
+    # Iteratively refine the samples
+    for t in tqdm(pipeline.scheduler.timesteps):
+        # Predict the noise residual using autocast for mixed precision
+        with torch.no_grad(), torch.cuda.amp.autocast():
+            noise_pred = pipeline.unet(samples, t).sample
+
+        # Compute the next less noisy image and update the samples
+        samples = pipeline.scheduler.step(noise_pred, t, samples).prev_sample
+
+    # Save the generated images
+    print("Saving generated images")
+    print("Sample shape:", samples.shape)
+    
+    # convert samples to numpy array
+    samples = samples.cpu().numpy()
+    save_and_plot_samples(
+        samples,
+        save_dir,
+        **plot_kwargs,
+    )
+
+    return samples
 
 from diffusers import StableDiffusionPipeline
 def generate_sb2(
@@ -34,65 +97,6 @@ def generate_sb2(
     # Save the generated images
     for i, img in enumerate(images):
         img.save(os.path.join(save_fig_dir, f"uncond_sb3_sample{i}.png"))
-
-from diffusers import DDIMPipeline #, DDPMPipeline
-def generate_ddpm_exposed(
-    num_inference_steps: int = 50,
-    num_images: int = 1,
-    save_grid_shape: Optional[Tuple[int, int]] = None,
-    save_fig_dir: str = "figs",
-    device='cpu',
-) -> None:
-    """
-    Generate images using the DDPM model from the Hugging Face Hub
-    NOTE: can also drop-in replace with DDPM model
-    This differs from generate_ddpm solely in that we expose the components more here
-    """
-    # Hugging Face hub directory from which we get the pre-trained CIFAR10 DDPM model's config
-    model_id = "google/ddpm-cifar10-32"
-
-    # Load the DDPM pipeline with the correct model and scheduler
-    pipeline = DDIMPipeline.from_pretrained(model_id, torch_dtype=torch.float16)
-    pipeline = pipeline.to(device)  # Move to the specified device
-
-    # Generate a random initial sample in float16 to match the model's precision
-    sample = torch.randn(
-        num_images,
-        pipeline.unet.config.in_channels,
-        pipeline.unet.config.sample_size,
-        pipeline.unet.config.sample_size,
-        dtype=torch.float16
-    ).to(device)
-
-    # Set the number of inference steps
-    pipeline.scheduler.set_timesteps(num_inference_steps=num_inference_steps)
-
-    # Iteratively refine the sample
-    for t in tqdm(pipeline.scheduler.timesteps):
-        # Predict the noise residual using autocast for mixed precision
-        with torch.no_grad(), torch.cuda.amp.autocast():
-            noise_pred = pipeline.unet(sample, t).sample
-
-        # Compute the next less noisy image and update the sample
-        sample = pipeline.scheduler.step(noise_pred, t, sample).prev_sample
-
-    # Save the generated images
-    print("Saving generated images")
-    print("Sample shape:", sample.shape)
-
-    if save_grid_shape is not None:
-        save_images_grid(
-            sample, 
-            os.path.join(save_fig_dir, "ddpm_cifar10_sample_grid.png"), 
-            grid_shape=save_grid_shape,
-        )
-    else:
-        # Convert the tensor to images and save
-        samples = sample.clamp(-1, 1).add(1).div(2).mul(255).to(torch.uint8).cpu()
-        for i, img in enumerate(samples):
-            img = img.permute(1, 2, 0).numpy()  # Reorder dimensions to HWC
-            img = Image.fromarray(img)
-            img.save(os.path.join(save_fig_dir, f"ddpm_cifar10_sample_{i}.png"))
 
 from diffusers import DDPMPipeline
 def generate_ddpm(

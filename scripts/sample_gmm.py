@@ -6,9 +6,14 @@ import os
 
 from diffusion_gmm.gmm import ImageGMM
 
-from diffusion_gmm.utils import save_images_grid, plot_pixel_intensity_hist
+from diffusion_gmm.utils import (
+    plot_pixel_intensity_hist,
+    default_image_processing_fn,
+)
 
 import matplotlib.pyplot as plt
+
+import argparse
 
 
 WORK_DIR = os.getenv('WORK')
@@ -17,15 +22,28 @@ DATA_DIR = os.path.join(WORK_DIR, 'vision_datasets')
 
 if __name__ == '__main__':
 
-    use_generated_data = False
-    batch_size = 1
+    # Define the parameters
+    parser = argparse.ArgumentParser(description='Fit a Gaussian Mixture Model (GMM) to image data')
+    parser.add_argument('--use_generated_data', action='store_true', help='Use generated data instead of real data')
+    parser.add_argument('--batch_size', type=int, default=32, help='Batch size for dataloader')
+    parser.add_argument('--n_for_stats', type=int, default=1024, help='Number of images to use for computing statistics')
+    parser.add_argument('--n_for_fit', type=int, default=1024, help='Number of images to use for fitting the GMM')
+    parser.add_argument('--dataset_name', type=str, default='cifar10', help='Name of the dataset')
+    parser.add_argument('--n_samples_generate', type=int, default=1024, help='Number of samples to generate from the fitted GMM')
+    args = parser.parse_args()
+
+    use_generated_data = args.use_generated_data
+    batch_size = args.batch_size
 
     # for gmm fitting
-    n_for_stats = 1024
-    n_for_fit = 1024
+    n_for_stats = args.n_for_stats
+    n_for_fit = args.n_for_fit
 
     # for generating samples
-    dataset_name = 'cifar10'
+    dataset_name = args.dataset_name
+    if dataset_name != 'cifar10':
+        raise NotImplementedError("Only CIFAR10 dataset is supported for now.")
+
     cifar10_shape = (3, 32, 32)
     n_samples_generate = 1024
 
@@ -48,11 +66,6 @@ if __name__ == '__main__':
             download=True, 
             transform=transform
         )
-
-        # # Limit the number of samples
-        # num_samples = 1000
-        # dataset.data = dataset.data[:num_samples]
-        # dataset.targets = dataset.targets[:num_samples]
 
     print("Image directory:", image_dir)
 
@@ -108,20 +121,21 @@ if __name__ == '__main__':
     save_dir = os.path.join(DATA_DIR, 'gmm_cifar10', 'unknown')
     save_name = f"gmm_{dataset_name}"
     print(f"Saving samples generated from the fitted GMM to {save_dir}...")
+
+    plot_kwargs = {
+        'save_grid_dir': 'figs',
+        'save_grid_shape': (10, 10),
+        'process_fn': None,
+    }
     samples = gmm.save_samples(
         n_samples=n_samples_generate, 
-        save_fig_dir=save_dir,
-        save_grid_shape=None,
-        save_name=save_name,
+        save_dir=save_dir,
+        plot_kwargs=plot_kwargs,
     )
-    
-    print("Samples shape: ", samples.shape)
-    print("Saving a 10x10 grid of the first 100 samples to figs directory...")
-    save_images_grid(
-        samples[:100], 
-        file_path=os.path.join('figs', f"{save_name}_sample_grid.png"), 
-        grid_shape=(10, 10),
-    )
+
+    # count number of negative values in samples
+    num_neg_values = np.sum(samples < 0)
+    print(f"Number of negative values in samples: {num_neg_values}")
 
     # Plot the histogram of samples generated from the fitted GMM
     print("Plotting histogram of computed pixel statistics...")

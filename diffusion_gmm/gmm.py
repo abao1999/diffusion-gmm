@@ -1,12 +1,13 @@
-from torch.utils.data import DataLoader
-from sklearn.mixture import GaussianMixture
 import numpy as np
 import os
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Callable
 from PIL import Image
 from tqdm.auto import tqdm
 
-from diffusion_gmm.utils import save_images_grid
+from torch.utils.data import DataLoader
+from sklearn.mixture import GaussianMixture
+
+from diffusion_gmm.utils import save_and_plot_samples
 
 
 class ImageGMM():
@@ -59,6 +60,7 @@ class ImageGMM():
         
         # Compute the mean and covariance
         mean = np.mean(all_pixels, axis=0)
+        # get the pixel-wise covariance matrix
         covariance = np.cov(all_pixels, rowvar=False)
 
         self.mean = mean
@@ -109,46 +111,33 @@ class ImageGMM():
 
     def save_samples(
         self,
-        n_samples: int = 1024, 
-        save_fig_dir: str = 'figs',
-        save_grid_shape: Optional[Tuple[int, int]] = None,
-        save_name: str = 'gmm',
+        n_samples: int, 
+        save_dir: str,
+        plot_kwargs: dict = {},
     ):
         """
         Generate samples from the fitted GMM and save them as images with self.img_shape
         Args:
             gmm: Fitted Gaussian Mixture Model, which generates (flattened) samples
             n_samples: Number of samples to generate
-            save_fig_dir: Directory to save the samples after converting to images
-            save_name: Name of the file to save the samples
+            save_dir: Directory to save the samples after converting to images
         """
-        os.makedirs(save_fig_dir, exist_ok=True)
+        os.makedirs(save_dir, exist_ok=True)
         
+        # Sample from the fitted GMM
         samples_flattened, _ = self.gmm.sample(n_samples)
         flattened_sample_shape = samples_flattened[0].shape
         assert np.prod(self.img_shape) == flattened_sample_shape, "New shape does not match the sample shape"
 
         if self.verbose:
             print("Sample shape: ", flattened_sample_shape)
-            print(f"Saving {n_samples} samples from the fitted GMM to {save_fig_dir}...")
+            print(f"Saving {n_samples} samples from the fitted GMM to {save_dir}...")
 
         samples = samples_flattened.reshape(-1, *self.img_shape)
-
-        # Convert the samples to images and save
-        if save_grid_shape is not None:
-            save_images_grid(
-                samples, 
-                os.path.join(save_fig_dir, f"{save_name}_sample_grid.png"), 
-                grid_shape=save_grid_shape,
-            )
-        else:
-            # processed_samples = np.clip(samples, -1, 1)
-            # processed_samples = ((processed_samples + 1) / 2) * 255
-            # processed_samples = processed_samples.astype(np.uint8)
-            for i, img in tqdm(enumerate(samples)):
-                img = np.transpose(img, (1, 2, 0))  # Reorder dimensions to HWC
-                img = (img * 255).astype(np.uint8)  # Convert to uint8
-                img = Image.fromarray(img)
-                img.save(os.path.join(save_fig_dir, f"{save_name}_sample_{i}.png"))
+        save_and_plot_samples(
+            samples, 
+            save_dir, 
+            **plot_kwargs,
+        )
         
         return samples
