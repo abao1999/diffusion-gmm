@@ -1,19 +1,26 @@
-import torch
-import numpy as np
 import os
+from typing import Optional
+
+import numpy as np
+import torch
+from diffusers import (
+    DDIMPipeline,  # type: ignore
+    DiffusionPipeline,  # type: ignore
+    StableDiffusionPipeline,  # type: ignore
+)
 from tqdm.auto import tqdm
-from typing import Optional, Tuple
 
-from diffusion_gmm.utils import save_images_grid, save_and_plot_samples
+from diffusion_gmm.utils import save_and_plot_samples
+
+# TODO: make class for diffusion models
 
 
-from diffusers import DDIMPipeline #, DDPMPipeline
 def generate_ddpm_exposed(
     num_inference_steps: int,
     num_images: int,
     save_dir: str,
     plot_kwargs: dict = {},
-    device='cpu',
+    device="cpu",
 ) -> np.ndarray:
     """
     Generate images using the DDPM model from the Hugging Face Hub
@@ -42,7 +49,7 @@ def generate_ddpm_exposed(
         pipeline.unet.config.in_channels,
         pipeline.unet.config.sample_size,
         pipeline.unet.config.sample_size,
-        dtype=torch.float16
+        dtype=torch.float16,
     ).to(device)
 
     # Set the number of inference steps
@@ -60,7 +67,7 @@ def generate_ddpm_exposed(
     # Save the generated images
     print("Saving generated images")
     print("Sample shape:", samples.shape)
-    
+
     # convert samples to numpy array
     samples = samples.cpu().numpy()
     save_and_plot_samples(
@@ -71,13 +78,76 @@ def generate_ddpm_exposed(
 
     return samples
 
-from diffusers import StableDiffusionPipeline
+
+def generate_image_DiffusionPipe(
+    model_id: str = "CompVis/stable-diffusion-v1-4",
+    num_inference_steps: int = 50,
+    guidance_scale: float = 7.5,
+    height: int = 512,
+    width: int = 512,
+    prompt: Optional[str] = None,  # "A photo of a cat, realistic style",
+    seed: Optional[int] = None,
+    num_images: int = 1,
+    save_dir: str = "figs",
+    plot_kwargs: dict = {},
+) -> np.ndarray:
+    """
+    Generate images using a text-to-image diffusion model.
+
+    Args:
+        model_id (str): The model ID of the pretrained text-to-image diffusion model (default: "CompVis/stable-diffusion-v1-4").
+        num_inference_steps (int): Number of denoising steps (default: 50).
+        guidance_scale (float): Scale for classifier-free guidance (default: 7.5).
+        height (int): Height of the image (default: 512).
+        width (int): Width of the image (default: 512).
+        prompt (Optional[str]): A text description for the image to generate (default: None).
+        seed (Optional[int]): Random seed for reproducibility (default: None).
+        num_images (int): Number of images to generate (default: 1).
+        save_dir (str): Directory to save the generated images (default: "figs").
+    """
+
+    # Load the pretrained model
+    pipeline = DiffusionPipeline.from_pretrained(model_id)
+
+    # Move the pipeline to GPU if available
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    pipeline = pipeline.to(device)
+
+    # Set the random seed if provided
+    if seed is not None:
+        torch.manual_seed(seed)
+
+    # Generate the images
+    samples = pipeline(
+        prompt=prompt,
+        num_inference_steps=num_inference_steps,
+        guidance_scale=guidance_scale,
+        height=height,
+        width=width,
+        num_images=num_images,
+    ).images
+
+    # Save the generated images
+    print("Saving generated images")
+    print("Sample shape:", samples.shape)
+
+    # convert samples to numpy array
+    samples = samples.cpu().numpy()
+    save_and_plot_samples(
+        samples,
+        save_dir,
+        **plot_kwargs,
+    )
+
+    return samples
+
+
 def generate_sb2(
     num_images: int = 1,
     guidance_scale: float = 7.5,
     prompt: str = "",
-    save_fig_dir: str = "figs",
-    device: str = 'cpu'
+    save_dir: str = "figs",
+    device: str = "cpu",
 ) -> None:
     """
     Generate images using the Stable Diffusion model from the Hugging Face Hub
@@ -88,7 +158,9 @@ def generate_sb2(
     model_id = "stabilityai/stable-diffusion-2"
 
     # Initialize the pipeline
-    pipeline = StableDiffusionPipeline.from_pretrained(model_id, torch_dtype=torch.float16)
+    pipeline = StableDiffusionPipeline.from_pretrained(
+        model_id, torch_dtype=torch.float16
+    )
     pipeline = pipeline.to(device)  # Use GPU if available
 
     # prompt = "A photo of a cat sitting on a beach"
@@ -96,60 +168,15 @@ def generate_sb2(
 
     # Save the generated images
     for i, img in enumerate(images):
-        img.save(os.path.join(save_fig_dir, f"uncond_sb3_sample{i}.png"))
+        img.save(os.path.join(save_dir, f"uncond_sb3_sample{i}.png"))
 
-from diffusers import DDPMPipeline
-def generate_ddpm(
-    num_inference_steps: int = 50,
-    num_images: int = 1,
-    save_grid_shape: Optional[Tuple[int, int]] = None,
-    save_fig_dir: str = "figs",
-    device='cpu',
-) -> None:
-    """
-    Generate images using the DDPM model from the Hugging Face Hub
-    """
-    # This example uses a simple DDPM model that is lightweight and suitable for unconditional generation
-    model_id = "google/ddpm-cifar10-32"  # A lightweight model, trained on CIFAR-10, closest lightweight option
 
-    # Initialize the diffusion pipeline
-    pipeline = DDPMPipeline.from_pretrained(model_id, torch_dtype=torch.float16)
-    pipeline = pipeline.to(device)
-
-    # Generate a batch of images
-    with torch.no_grad(), torch.cuda.amp.autocast():
-        # Generate all images in one batch call
-        sample = pipeline(num_inference_steps=num_inference_steps, batch_size=num_images).images
-
-    # Convert batch of PIL images to a tensor or NumPy array
-    # Convert to tensor: shape will be [num_images, channels, height, width]
-    sample = torch.stack([torch.tensor(np.array(img)).permute(2, 0, 1) for img in sample]) / 255.0
-    # # Alternatively, convert to NumPy array: shape will be [num_images, height, width, channels]
-    # images_np = np.stack([np.array(img) for img in batch]) / 255.0
-
-    # Save the generated images
-    print("Saving generated images")
-    print("Sample shape:", sample.shape)
-
-    # Convert images from [-1, 1] to [0, 255] format and save
-    if save_grid_shape is not None:
-        save_images_grid(
-            sample, 
-            os.path.join(save_fig_dir, "another_ddpm_cifar10_sample_grid.png"),
-            grid_shape=save_grid_shape
-        )
-    else:
-        for i, img in enumerate(sample):
-            img = img.convert("RGB")  # Ensure RGB format
-            img.save(os.path.join(save_fig_dir, f"another_ddpm_cifar10_sample_{i}.png"))
-
-from diffusers import DiffusionPipeline
 def ldm_pipeline(
     prompt: str = "A painting of a squirrel eating a burger",
     num_inference_steps: int = 50,
     guidance_scale: float = 6,
-    save_fig_dir: str = "figs",
-    device: str = 'cpu'
+    save_dir: str = "figs",
+    device: str = "cpu",
 ) -> None:
     """
     Generate images using the Large Diffusion Model from the Hugging Face Hub
@@ -161,73 +188,12 @@ def ldm_pipeline(
     # run pipeline in inference (sample random noise and denoise)
     prompt = "A painting of a squirrel eating a burger"
     images = pipeline(
-        [prompt], 
-        num_inference_steps=num_inference_steps, 
-        eta=0.3, 
-        guidance_scale=guidance_scale
+        [prompt],
+        num_inference_steps=num_inference_steps,
+        eta=0.3,
+        guidance_scale=guidance_scale,
     ).images
 
     # save images
     for idx, image in enumerate(images):
-        image.save(os.path.join(save_fig_dir, f"ldm_256_sample_{idx}.png"))
-
-
-def generate_image_DiffusionPipe(
-    model_id: str = "CompVis/stable-diffusion-v1-4",
-    num_inference_steps: int = 50,
-    guidance_scale: float = 7.5,
-    height: int = 512,
-    width: int = 512,
-    prompt: Optional[str] = None, # "A photo of a cat, realistic style",
-    seed: Optional[int] = None,
-    num_images: int = 1,
-    save_fig_dir: str = "figs",
-    save_grid_shape: Optional[Tuple[int, int]] = None
-) -> None:
-    """
-    Generate images based on ImageNet class descriptions using a text-to-image diffusion model.
-    
-    Args:
-        model_id (str): The model ID of the pretrained text-to-image diffusion model (default: "CompVis/stable-diffusion-v1-4").
-        num_inference_steps (int): Number of denoising steps (default: 50).
-        guidance_scale (float): Scale for classifier-free guidance (default: 7.5).
-        height (int): Height of the image (default: 512).
-        width (int): Width of the image (default: 512).
-        prompt (Optional[str]): A text description of the ImageNet class.
-        seed (Optional[int]): Random seed for reproducibility (default: None).
-        num_images (int): Number of images to generate (default: 1).
-        save_fig_dir (str): Directory to save the generated images (default: "figs").
-        save_grid_shape (Optional[Tuple[int, int]]): Shape of the grid to save the images as a grid (default: None). 
-    """
-    
-    # Load the pretrained model
-    pipeline = DiffusionPipeline.from_pretrained(model_id)
-    
-    # Move the pipeline to GPU if available
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    pipeline = pipeline.to(device)
-    
-    # Set the random seed if provided
-    if seed is not None:
-        torch.manual_seed(seed)
-        
-    # Generate the images
-    image_samples = pipeline(
-        prompt=prompt,
-        num_inference_steps=num_inference_steps,
-        guidance_scale=guidance_scale,
-        height=height,
-        width=width,
-        num_images=num_images
-    ).images
-
-    # Save the generated images
-    if save_grid_shape is not None:
-        save_images_grid(
-            image_samples, 
-            os.path.join(save_fig_dir, "diffusion_sample_grid.png"), 
-            grid_shape=save_grid_shape
-        )
-    else:
-        for i, image in enumerate(image_samples):
-            image.save(os.path.join(save_fig_dir, f"diffusion_sample_{i}.png"))
+        image.save(os.path.join(save_dir, f"ldm_256_sample_{idx}.png"))
