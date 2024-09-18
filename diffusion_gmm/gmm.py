@@ -97,7 +97,7 @@ class ImageGMM:
         synthetic_data = np.random.multivariate_normal(
             mean, covariance, size=n_samples_fit
         )
-        self.gmm.fit(synthetic_data)
+        self.gmm.fit(synthetic_data)  # NOTE: fit on flattened cifar10 images
 
     def __call__(
         self,
@@ -129,7 +129,9 @@ class ImageGMM:
         os.makedirs(save_dir, exist_ok=True)
 
         # Sample from the fitted GMM
-        samples_flattened, _ = self.gmm.sample(n_samples)
+        samples_flattened, _ = self.gmm.sample(
+            n_samples
+        )  # TODO: sample from one component only
         flattened_sample_shape = samples_flattened[0].shape
         assert (
             np.prod(self.img_shape) == flattened_sample_shape

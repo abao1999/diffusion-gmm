@@ -125,6 +125,7 @@ if __name__ == "__main__":
     print("covariance shape: ", covariance.shape)
     print("mean covariance: ", np.mean(covariance))
 
+    # plot histogram of per-pixel mean and covariance
     plt.figure(figsize=(10, 6))
     plt.hist(mean, bins=100)
     plt.title("Mean Pixel Values")
