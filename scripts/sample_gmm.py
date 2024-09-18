@@ -32,18 +32,6 @@ if __name__ == "__main__":
         "--batch_size", type=int, default=32, help="Batch size for dataloader"
     )
     parser.add_argument(
-        "--n_for_stats",
-        type=int,
-        default=1024,
-        help="Number of images to use for computing statistics",
-    )
-    parser.add_argument(
-        "--n_for_fit",
-        type=int,
-        default=1024,
-        help="Number of images to use for fitting the GMM",
-    )
-    parser.add_argument(
         "--dataset_name", type=str, default="cifar10", help="Name of the dataset"
     )
     parser.add_argument(
@@ -52,14 +40,28 @@ if __name__ == "__main__":
         default=1024,
         help="Number of samples to generate from the fitted GMM",
     )
+    parser.add_argument(
+        "--num_images",
+        type=int,
+        default=1024,
+        help="Number of images to process from the dataset",
+    )
+    parser.add_argument(
+        "--target_class",
+        type=int,
+        default=None,
+        help="Target class for real data (default: None)",
+    )
+
     args = parser.parse_args()
 
     use_generated_data = args.use_generated_data
     batch_size = args.batch_size
+    n_samples_generate = args.n_samples_generate
+    num_images = args.num_images
+    target_class = args.target_class
 
-    # for gmm fitting
-    n_for_stats = args.n_for_stats
-    n_for_fit = args.n_for_fit
+    print("Target class: ", target_class)
 
     # for generating samples
     dataset_name = args.dataset_name
@@ -67,7 +69,6 @@ if __name__ == "__main__":
         raise NotImplementedError("Only CIFAR10 dataset is supported for now.")
 
     cifar10_shape = (3, 32, 32)
-    n_samples_generate = 1024
 
     # Define the transformation to convert images to tensors
     transform = transforms.Compose([transforms.ToTensor()])
@@ -76,33 +77,30 @@ if __name__ == "__main__":
     if use_generated_data:
         # load generated images
         image_dir = os.path.join(DATA_DIR, f"diffusion_{dataset_name}")
-        dataset = datasets.ImageFolder(root=image_dir, transform=transform)
+        data = datasets.ImageFolder(root=image_dir, transform=transform)
     else:
-        # load real images
-        image_dir = os.path.join(DATA_DIR, dataset_name)
-        dataset = datasets.CIFAR10(
+        # Load the real CIFAR10 data from torchvision
+        data = datasets.CIFAR10(
             root=os.path.join(DATA_DIR, "cifar10"),
-            train=False,
+            train=True,  # TODO: change to False
             download=True,
             transform=transform,
+            target_transform=None if target_class is None else lambda y: y == target_class,
         )
 
-    print("Image directory:", image_dir)
+    if target_class is not None:
+        # Create a sampler that only selects images from the target class
+        indices = [i for i, (_, label) in enumerate(data) if label]
+        print(f"Number of images of class {target_class}: {len(indices)}")
+        sel_indices = indices[:num_images] if len(indices) >= num_images else indices
+        custom_sampler = SubsetRandomSampler(sel_indices)
+    else:
+        # choose num_images random indices from the dataset
+        sel_indices = np.random.choice(len(data), num_images, replace=False)
+        custom_sampler = SubsetRandomSampler(list(sel_indices))
 
-    n_tot_images = len(dataset)
-    if n_for_stats > n_tot_images:
-        print(
-            f"Warning: Only {n_tot_images} images found in the dataset. Using all available images."
-        )
-        n_for_stats = n_tot_images
-
-    custom_sampler = SubsetRandomSampler(range(n_for_stats))
     dataloader = DataLoader(
-        dataset,
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=0,
-        sampler=custom_sampler,  # if custom_sampler else None
+        data, batch_size=batch_size, shuffle=False, sampler=custom_sampler
     )
 
     gmm = ImageGMM(
@@ -114,44 +112,21 @@ if __name__ == "__main__":
 
     # gmm(n_samples_compute_stats=1024, n_samples_fit=1024, run_name='gmm_cifar10')
 
-    gmm.fit(n_samples_compute_stats=n_for_stats, n_samples_fit=n_for_fit)
+    gmm.fit()
     print("GMM fitted successfully.")
-
-    mean = np.array(gmm.mean)
-    covariance = np.array(gmm.covariance)
-    # plot histogram of per-pixel mean and covariance
-    print("mean shape: ", mean.shape)
-    print("mean mean: ", np.mean(mean))
-    print("covariance shape: ", covariance.shape)
-    print("mean covariance: ", np.mean(covariance))
-
-    # plot histogram of per-pixel mean and covariance
-    plt.figure(figsize=(10, 6))
-    plt.hist(mean, bins=100)
-    plt.title("Mean Pixel Values")
-    plt.ylabel("Frequency")
-    plt.grid(True)
-    plt.savefig("figs/mean_pixel_values.png", dpi=300)
-
-    plt.figure(figsize=(10, 6))
-    plt.hist(covariance.flatten(), bins=100)
-    plt.title("Covariance Pixel Values")
-    plt.ylabel("Frequency")
-    plt.grid(True)
-    plt.savefig("figs/covariance_pixel_values.png", dpi=300)
 
     # Save the samples generated from the fitted GMM
     save_dir = os.path.join(DATA_DIR, "gmm_cifar10", "unknown")
     save_name = f"gmm_{dataset_name}"
     print(f"Saving samples generated from the fitted GMM to {save_dir}...")
 
-    samples = gmm.save_samples(
+    samples = gmm.save_samples_single_class(
         n_samples=n_samples_generate,
         save_dir=save_dir,
         plot_kwargs={
             "save_grid_dir": FIGS_DIR,
             "save_grid_shape": (10, 10),
-            "process_fn": default_image_processing_fn,
+            "process_fn": None,
         },
     )
 

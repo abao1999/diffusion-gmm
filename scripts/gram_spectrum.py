@@ -81,10 +81,28 @@ def main(
         )
 
     elif mode == "gmm":
-        # Load the generated CIFAR10 data from the GMM model
-        data = datasets.ImageFolder(
-            root=os.path.join(DATA_DIR, "gmm_cifar10"), transform=transform
-        )
+        # # Load the generated CIFAR10 data from the GMM model
+        # data = datasets.ImageFolder(
+        #     root=os.path.join(DATA_DIR, "gmm_cifar10"), transform=transform
+        # )
+        # Load the generated CIFAR10 data from the GMM model stored as .npy files
+        class NumpyDataset(torch.utils.data.Dataset):
+            def __init__(self, root, transform=None):
+                self.root_dir = root
+                self.transform = transform
+                self.file_list = [f for f in os.listdir(root) if f.endswith('.npy')]
+
+            def __len__(self):
+                return len(self.file_list)
+
+            def __getitem__(self, idx):
+                file_path = os.path.join(self.root_dir, self.file_list[idx])
+                image = np.load(file_path)
+                if self.transform:
+                    image = self.transform(image)
+                return image, 9  # Dummy label
+
+        data = NumpyDataset(root=os.path.join(DATA_DIR, "gmm_cifar10", "unknown"), transform=None)
 
     elif mode == "real":
         # Load the real CIFAR10 data from torchvision
@@ -112,7 +130,9 @@ def main(
         # # custom_sampler = SubsetRandomSampler(range(num_images))
 
         # choose num_images random indices from the dataset
+        print("len data: ", len(data))
         sel_indices = np.random.choice(len(data), num_images, replace=False)
+        print("sel indices shape: ", sel_indices.shape)
         custom_sampler = SubsetRandomSampler(list(sel_indices))
 
     dataloader = DataLoader(

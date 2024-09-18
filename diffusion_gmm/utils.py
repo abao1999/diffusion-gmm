@@ -190,8 +190,6 @@ def save_and_plot_samples(
         )
         # Default behavior: save as npy files
         for i, img in enumerate(samples):
-            # Reorder dimensions to (h, w, c)
-            img = np.transpose(img, (1, 2, 0))
             save_path = os.path.join(save_dir, f"sample_{i}.npy")
             np.save(save_path, img)
 

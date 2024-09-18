@@ -37,14 +37,14 @@ def plot_spectra_from_npy(
         color="tab:blue",
         label="Real",
     )
-    plt.hist(
-        diffusion_eigenvalues,
-        bins=bins,
-        density=density,
-        alpha=0.5,
-        color="tab:orange",
-        label="Diffusion",
-    )
+    # plt.hist(
+    #     diffusion_eigenvalues,
+    #     bins=bins,
+    #     density=density,
+    #     alpha=0.5,
+    #     color="tab:orange",
+    #     label="Diffusion",
+    # )
     plt.hist(
         gmm_eigenvalues,
         bins=bins,

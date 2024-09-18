@@ -1,5 +1,5 @@
 import os
-from typing import Tuple
+from typing import Tuple, Optional
 
 import numpy as np
 from sklearn.mixture import GaussianMixture
@@ -24,16 +24,40 @@ class ImageGMM:
     ):
         self.dataloader = dataloader
         self.img_shape = img_shape
-        self.n_components = n_components
         self.verbose = verbose
         self.gmm = GaussianMixture(n_components=n_components, covariance_type="full")
         self.mean = None  # to be set after fitting
         self.covariance = None  # to be set after fitting
 
-    # Function to compute mean and covariance matrix from dataset
-    def _compute_mean_and_covariance(
+    def fit(
         self,
-        num_images: int = 1024,
+    ) -> None:
+        """
+        Fit a Gaussian Mixture Model (GMM)
+        """
+        all_images = []
+        # Accumulate all image pixel values
+        for idx, (images, _) in tqdm(enumerate(self.dataloader)):
+            if idx == 0 and self.img_shape is None:
+                self.img_shape = images.shape[1:]
+                if self.verbose:
+                    print("Image shape: ", self.img_shape)
+            images = images.numpy()
+            all_images.append(images)
+
+        # Concatenate all pixel values
+        all_images = np.concatenate(all_images, axis=0)
+                # Flatten images to 2D: (number of images, number of pixels per image)
+        all_images = all_images.reshape(-1, np.prod(self.img_shape))
+        print("all_images shape: ", all_images.shape)
+
+
+        self.gmm.fit(all_images)  # NOTE: fit on flattened cifar10 images
+
+    # Function to compute mean and covariance matrix from dataset
+    def set_mean_and_covariance(
+        self,
+        num_images: int,
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Compute the mean and covariance matrix from the dataset by flattening the images from the dataloader
@@ -68,50 +92,41 @@ class ImageGMM:
 
         return mean, covariance
 
-    def fit(
+    def save_samples_single_class(
         self,
-        n_samples_compute_stats: int = 1024,
-        n_samples_fit: int = 1024,
-    ) -> None:
-        """
-        Fit a Gaussian Mixture Model (GMM)
-        Args:
-            n_samples_compute_stats: Number of samples to compute mean and covariance
-            n_samples_fit: Number of samples to fit the GMM
-        """
-        # Computed mean and covariance of samples from image loader, to use for fitting gmm
-        mean, covariance = self._compute_mean_and_covariance(n_samples_compute_stats)
-        print("mean: ", mean)
-        print("covariance: ", covariance)
-        print("mean mean: ", np.mean(mean))
-        print("mean covariance: ", np.mean(covariance))
+        n_samples: int,
+        save_dir: str,
+        plot_kwargs: dict = {},
+    ):
+        mean, covariance = self.mean, self.covariance
+        if mean is None or covariance is None:
+            mean, covariance = self.set_mean_and_covariance(n_samples)
+        # Generate synthetic data from the mean and covariance to fit the GMM
+        samples = np.random.multivariate_normal(
+            mean, covariance, size=n_samples
+        )
+
+        sample_shape = samples[0].shape
+        assert (
+            np.prod(self.img_shape) == sample_shape
+        ), "New shape does not match the sample shape"
+
+        samples = samples.reshape(-1, *self.img_shape)
 
         if self.verbose:
-            print(
-                f"Fitting GMM with {self.n_components} components and {n_samples_fit} samples..."
-            )
-            print("Mean shape:", mean.shape)
-            print("Covariance shape:", covariance.shape)
+            print("Samples shape: ", samples.shape)
+            print(f"Saving {n_samples} samples from the fitted GMM to {save_dir}...")
 
-        # Generate synthetic data from the mean and covariance to fit the GMM
-        synthetic_data = np.random.multivariate_normal(
-            mean, covariance, size=n_samples_fit
+        # Save and plot the samples
+        save_and_plot_samples(
+            samples,
+            save_dir,
+            **plot_kwargs,
         )
-        self.gmm.fit(synthetic_data)  # NOTE: fit on flattened cifar10 images
 
-    def __call__(
-        self,
-        n_samples_compute_stats: int = 1024,
-        n_samples_fit: int = 1024,
-    ) -> None:
-        self.fit(n_samples_compute_stats, n_samples_fit)
-        self.save_samples(
-            n_samples=100,  # n_samples_gmm,
-            save_dir="figs",
-            plot_kwargs={
-                "save_grid_shape": (10, 10),
-            },
-        )
+        return samples
+        
+
 
     def save_samples(
         self,
@@ -128,20 +143,22 @@ class ImageGMM:
         """
         os.makedirs(save_dir, exist_ok=True)
 
-        # Sample from the fitted GMM
-        samples_flattened, _ = self.gmm.sample(
-            n_samples
-        )  # TODO: sample from one component only
-        flattened_sample_shape = samples_flattened[0].shape
+        # Generate samples from the fitted GMM
+        samples, _ = self.gmm.sample(n_samples)
+        
+        # flattened_sample_shape = samples_flattened[0].shape
+        sample_shape = samples[0].shape
         assert (
-            np.prod(self.img_shape) == flattened_sample_shape
+            np.prod(self.img_shape) == sample_shape
         ), "New shape does not match the sample shape"
 
+        samples = samples.reshape(-1, *self.img_shape)
+
         if self.verbose:
-            print("Sample shape: ", flattened_sample_shape)
+            print("Samples shape: ", samples.shape)
             print(f"Saving {n_samples} samples from the fitted GMM to {save_dir}...")
 
-        samples = samples_flattened.reshape(-1, *self.img_shape)
+        # Save and plot the samples
         save_and_plot_samples(
             samples,
             save_dir,
