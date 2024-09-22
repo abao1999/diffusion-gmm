@@ -1,6 +1,6 @@
 import argparse
 import os
-from typing import Optional
+from typing import List, Optional
 
 import numpy as np
 import torch
@@ -13,6 +13,7 @@ from torch.utils.data import (  # SubsetRandomSampler, RandomSampler
 )
 from tqdm.auto import tqdm
 
+from diffusion_gmm.dataset import NumpyDataset
 from diffusion_gmm.utils import (
     compute_gram_matrix,
     get_gram_spectrum,
@@ -22,6 +23,19 @@ from diffusion_gmm.utils import (
 
 WORK_DIR = os.getenv("WORK", "")
 DATA_DIR = os.path.join(WORK_DIR, "vision_datasets")
+
+CIFAR10_CLASSES = [
+    "airplane",
+    "automobile",
+    "bird",
+    "cat",
+    "deer",
+    "dog",
+    "frog",
+    "horse",
+    "ship",
+    "truck",
+]
 
 
 def main(
@@ -81,28 +95,29 @@ def main(
         )
 
     elif mode == "gmm":
-        # # Load the generated CIFAR10 data from the GMM model
-        # data = datasets.ImageFolder(
-        #     root=os.path.join(DATA_DIR, "gmm_cifar10"), transform=transform
+        # # Load the generated CIFAR10 data from the GMM model stored as .npy files
+
+        root = os.path.join(DATA_DIR, "gmm_cifar10")
+        if target_class is not None:
+            target_class_name = CIFAR10_CLASSES[target_class]
+            root = os.path.join(root, target_class_name)
+            # check if root exists
+            if not os.path.exists(root):
+                raise FileNotFoundError(
+                    f"Target class folder {target_class_name} not found"
+                )
+            print(f"Loading target class {target_class_name} from {root}")
+
+        # def npy_loader(path):
+        #     sample = torch.from_numpy(np.load(path))
+        #     return sample
+
+        # data = datasets.DatasetFolder(
+        #     root=root,
+        #     loader=npy_loader,
+        #     extensions=[".npy"],  # type: ignore
         # )
-        # Load the generated CIFAR10 data from the GMM model stored as .npy files
-        class NumpyDataset(torch.utils.data.Dataset):
-            def __init__(self, root, transform=None):
-                self.root_dir = root
-                self.transform = transform
-                self.file_list = [f for f in os.listdir(root) if f.endswith('.npy')]
-
-            def __len__(self):
-                return len(self.file_list)
-
-            def __getitem__(self, idx):
-                file_path = os.path.join(self.root_dir, self.file_list[idx])
-                image = np.load(file_path)
-                if self.transform:
-                    image = self.transform(image)
-                return image, 9  # Dummy label
-
-        data = NumpyDataset(root=os.path.join(DATA_DIR, "gmm_cifar10", "unknown"), transform=None)
+        data = NumpyDataset(root=root, transform=None)
 
     elif mode == "real":
         # Load the real CIFAR10 data from torchvision
@@ -119,9 +134,13 @@ def main(
     else:
         raise ValueError(f"Invalid mode: {mode}")
 
+    # classes = data.classes
+    # print(f"Classes: {classes}")
+    # print(f"Targets: {data.targets}")
+
     if target_class is not None:
         # Create a sampler that only selects images from the target class
-        indices = [i for i, (_, label) in enumerate(data) if label]
+        indices = [i for i, (_, label) in enumerate(DataLoader(data)) if label]
         print(f"Number of images of class {target_class}: {len(indices)}")
         sel_indices = indices[:num_images] if len(indices) >= num_images else indices
         custom_sampler = SubsetRandomSampler(sel_indices)
@@ -130,16 +149,16 @@ def main(
         # # custom_sampler = SubsetRandomSampler(range(num_images))
 
         # choose num_images random indices from the dataset
-        print("len data: ", len(data))
-        sel_indices = np.random.choice(len(data), num_images, replace=False)
-        print("sel indices shape: ", sel_indices.shape)
-        custom_sampler = SubsetRandomSampler(list(sel_indices))
+        num_tot_samples = len(data)
+        print("len data: ", num_tot_samples)
+        sel_indices = list(np.random.choice(num_tot_samples, num_images, replace=False))
+        custom_sampler = SubsetRandomSampler(sel_indices)
 
     dataloader = DataLoader(
         data, batch_size=batch_size, shuffle=False, sampler=custom_sampler
     )
     # Accumulate eigenvalues from all images
-    all_eigenvalues = []
+    all_eigenvalues: List[float] = []
 
     for idx, (images, _) in tqdm(enumerate(dataloader)):
         if cnn_model_id is not None:
@@ -160,10 +179,10 @@ def main(
             all_eigenvalues.extend(spectrum)
 
     # Convert accumulated eigenvalues to a numpy array
-    all_eigenvalues = np.array(all_eigenvalues)
+    all_eigenvalues = np.array(all_eigenvalues)  # type: ignore
     if verbose:
-        print("all_eigenvalues shape: ", all_eigenvalues.shape)
-    # save computed eigenvalues to a file
+        print("all_eigenvalues shape: ", all_eigenvalues.shape)  # type: ignore
+
     np.save(os.path.join(save_dir, save_name), all_eigenvalues)
     # np.save(f"gram_spectrum.npy", all_eigenvalues)
 
@@ -209,8 +228,15 @@ if __name__ == "__main__":
     npy_save_dir = "results"
     figs_save_dir = "figs"
 
+    # save computed eigenvalues to a file
     npy_save_name = f"{dataset}_gram_spectrum.npy"
     fig_save_name = f"{dataset}_gram_spectrum.png"
+
+    if target_class is not None:
+        target_class_name = CIFAR10_CLASSES[target_class]
+        print(f"Target class name: {target_class_name}")
+        npy_save_name = f"{dataset}_{target_class_name}_gram_spectrum.npy"
+        fig_save_name = f"{dataset}_{target_class_name}_gram_spectrum.png"
 
     if mode == "diffusion":
         diffusion_model = "ddpm"
@@ -227,7 +253,7 @@ if __name__ == "__main__":
     npy_path = os.path.join(npy_save_dir, npy_save_name)
 
     # if npy file doesnt already exist, compute and save it
-    if True:  # not os.path.exists(npy_path) or args.overwrite:
+    if not os.path.exists(npy_path) or args.overwrite:
         print("Computing and saving Gram spectrum...")
         main(
             mode,

@@ -1,17 +1,12 @@
 import argparse
 import os
 
-import matplotlib.pyplot as plt
 import numpy as np
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader, SubsetRandomSampler
 
 from diffusion_gmm.gmm import ImageGMM
-from diffusion_gmm.utils import (
-    default_image_processing_fn,
-    plot_pixel_intensity_hist,
-)
 
 FIGS_DIR = "figs"
 WORK_DIR = os.getenv("WORK", "")
@@ -27,6 +22,9 @@ if __name__ == "__main__":
         "--use_generated_data",
         action="store_true",
         help="Use generated data instead of real data",
+    )
+    parser.add_argument(
+        "--n_components", type=int, default=1, help="Number of components"
     )
     parser.add_argument(
         "--batch_size", type=int, default=32, help="Batch size for dataloader"
@@ -56,6 +54,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     use_generated_data = args.use_generated_data
+    n_components = args.n_components
     batch_size = args.batch_size
     n_samples_generate = args.n_samples_generate
     num_images = args.num_images
@@ -78,6 +77,8 @@ if __name__ == "__main__":
         # load generated images
         image_dir = os.path.join(DATA_DIR, f"diffusion_{dataset_name}")
         data = datasets.ImageFolder(root=image_dir, transform=transform)
+        raise NotImplementedError
+        # TODO: need to align labels (targets) when we don't have all the target classes
     else:
         # Load the real CIFAR10 data from torchvision
         data = datasets.CIFAR10(
@@ -85,19 +86,26 @@ if __name__ == "__main__":
             train=True,  # TODO: change to False
             download=True,
             transform=transform,
-            target_transform=None if target_class is None else lambda y: y == target_class,
+            target_transform=None
+            if target_class is None
+            else lambda y: y == target_class,
         )
 
+    classes = data.classes
+    print(f"Classes: {classes}")
+
+    # filter the target_class dataset to include only at most num_images images
     if target_class is not None:
         # Create a sampler that only selects images from the target class
-        indices = [i for i, (_, label) in enumerate(data) if label]
+        indices = [i for i, (_, label) in enumerate(DataLoader(data)) if label]
         print(f"Number of images of class {target_class}: {len(indices)}")
         sel_indices = indices[:num_images] if len(indices) >= num_images else indices
         custom_sampler = SubsetRandomSampler(sel_indices)
     else:
         # choose num_images random indices from the dataset
-        sel_indices = np.random.choice(len(data), num_images, replace=False)
-        custom_sampler = SubsetRandomSampler(list(sel_indices))
+        num_tot_samples = len(data)
+        sel_indices = list(np.random.choice(num_tot_samples, num_images, replace=False))
+        custom_sampler = SubsetRandomSampler(sel_indices)
 
     dataloader = DataLoader(
         data, batch_size=batch_size, shuffle=False, sampler=custom_sampler
@@ -106,17 +114,21 @@ if __name__ == "__main__":
     gmm = ImageGMM(
         dataloader=dataloader,
         img_shape=cifar10_shape,
-        n_components=10,
+        n_components=n_components,  # NOTE: make sure this is number of classes when fitting on entire dataset
         verbose=True,
     )
 
-    # gmm(n_samples_compute_stats=1024, n_samples_fit=1024, run_name='gmm_cifar10')
-
-    gmm.fit()
-    print("GMM fitted successfully.")
+    ## We currently don't actually use the full GMM machinery, because we sample from only a single class for now
+    # gmm.fit()
+    # print("GMM fitted successfully.")
 
     # Save the samples generated from the fitted GMM
-    save_dir = os.path.join(DATA_DIR, "gmm_cifar10", "unknown")
+    if target_class is not None:
+        target_class_name = classes[target_class]
+        print(f"Target class name: {target_class_name}")
+        save_dir = os.path.join(DATA_DIR, "gmm_cifar10", target_class_name)
+    else:
+        save_dir = os.path.join(DATA_DIR, "gmm_cifar10", "unknown")
     save_name = f"gmm_{dataset_name}"
     print(f"Saving samples generated from the fitted GMM to {save_dir}...")
 
@@ -134,6 +146,6 @@ if __name__ == "__main__":
     num_neg_values = np.sum(samples < 0)
     print(f"Number of negative values in samples: {num_neg_values}")
 
-    # Plot the histogram of samples generated from the fitted GMM
-    print("Plotting histogram of computed pixel statistics...")
-    plot_pixel_intensity_hist(samples, bins=100)
+    # # Plot the histogram of samples generated from the fitted GMM
+    # print("Plotting histogram of computed pixel statistics...")
+    # plot_pixel_intensity_hist(samples, bins=100)

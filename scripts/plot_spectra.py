@@ -1,3 +1,4 @@
+import argparse
 import os
 
 import matplotlib.pyplot as plt
@@ -17,11 +18,11 @@ def plot_spectra_from_npy(
     """
     # Load the eigenvalues computed from the Gram matrices
     real_eigenvalues = np.load(real_npy_filepath)
-    diffusion_eigenvalues = np.load(diffusion_npy_filepath)
+    # diffusion_eigenvalues = np.load(diffusion_npy_filepath)
     gmm_eigenvalues = np.load(gmm_npy_filepath)
 
     print("Real eigenvalues shape: ", real_eigenvalues.shape)
-    print("Diffusion eigenvalues shape: ", diffusion_eigenvalues.shape)
+    # print("Diffusion eigenvalues shape: ", diffusion_eigenvalues.shape)
     print("GMM eigenvalues shape: ", gmm_eigenvalues.shape)
 
     # assert real_eigenvalues.shape == diffusion_eigenvalues.shape == gmm_eigenvalues.shape, "Eigenvalues shapes do not match"
@@ -68,14 +69,24 @@ def plot_spectra_from_npy(
 if __name__ == "__main__":
     data_dir = "results"
     dataset_name = "cifar10"
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--target_class_name", type=str, default=None, help="Target class for real data"
+    )
+    args = parser.parse_args()
+    target_class_name = args.target_class_name
+
+    path_suffix = "gram_spectrum.npy"
+    if target_class_name is not None:
+        path_suffix = f"{target_class_name}_{path_suffix}"
+
     plot_spectra_from_npy(
-        real_npy_filepath=os.path.join(data_dir, f"{dataset_name}_gram_spectrum.npy"),
+        real_npy_filepath=os.path.join(data_dir, f"{dataset_name}_{path_suffix}"),
         diffusion_npy_filepath=os.path.join(
-            data_dir, f"ddpm_{dataset_name}_gram_spectrum.npy"
+            data_dir, f"ddpm_{dataset_name}_{path_suffix}"
         ),
-        gmm_npy_filepath=os.path.join(
-            data_dir, f"gmm_{dataset_name}_gram_spectrum.npy"
-        ),
+        gmm_npy_filepath=os.path.join(data_dir, f"gmm_{dataset_name}_{path_suffix}"),
         save_dir="figs",
-        save_name="all_spectra.png",
+        save_name=f"{target_class_name or 'all'}_spectra.png",
     )

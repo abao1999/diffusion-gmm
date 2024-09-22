@@ -69,14 +69,14 @@ def generate_ddpm_exposed(
     print("Sample shape:", samples.shape)
 
     # convert samples to numpy array
-    samples = samples.cpu().numpy()
+    samples_np = samples.cpu().numpy()
     save_and_plot_samples(
-        samples,
+        samples_np,
         save_dir,
         **plot_kwargs,
     )
 
-    return samples
+    return samples_np
 
 
 def generate_image_DiffusionPipe(

@@ -153,7 +153,7 @@ def save_and_plot_samples(
 
     TODO: keep as torch.Tensor or compute to np.ndarray?
     """
-
+    os.makedirs(save_dir, exist_ok=True)
     print("Saving samples to ", save_dir)
     if process_fn is not None:
         # apply postprocessing to samples
@@ -164,6 +164,7 @@ def save_and_plot_samples(
 
         # save image grid of subset of samples
         if save_grid_dir is not None:
+            os.makedirs(save_grid_dir, exist_ok=True)
             parent_name = os.path.basename(os.path.dirname(save_dir))
             curr_name = os.path.basename(save_dir)
             save_name = f"{parent_name}_{curr_name}"
