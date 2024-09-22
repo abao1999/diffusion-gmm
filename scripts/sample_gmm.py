@@ -118,9 +118,11 @@ if __name__ == "__main__":
         verbose=True,
     )
 
-    ## We currently don't actually use the full GMM machinery, because we sample from only a single class for now
-    # gmm.fit()
-    # print("GMM fitted successfully.")
+    # We currently don't actually use the full GMM machinery, because we sample from only a single class for now
+    if target_class is None and n_components > 1:
+        print("Fitting GMM ...")
+        gmm.fit()
+        print("GMM fitted successfully.")
 
     # Save the samples generated from the fitted GMM
     if target_class is not None:

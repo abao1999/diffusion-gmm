@@ -107,6 +107,9 @@ def main(
                     f"Target class folder {target_class_name} not found"
                 )
             print(f"Loading target class {target_class_name} from {root}")
+        else:
+            root = os.path.join(root, "unknown")
+            print(f"Loading all target classes from {root}")
 
         # def npy_loader(path):
         #     sample = torch.from_numpy(np.load(path))

@@ -18,11 +18,11 @@ def plot_spectra_from_npy(
     """
     # Load the eigenvalues computed from the Gram matrices
     real_eigenvalues = np.load(real_npy_filepath)
-    # diffusion_eigenvalues = np.load(diffusion_npy_filepath)
+    diffusion_eigenvalues = np.load(diffusion_npy_filepath)
     gmm_eigenvalues = np.load(gmm_npy_filepath)
 
     print("Real eigenvalues shape: ", real_eigenvalues.shape)
-    # print("Diffusion eigenvalues shape: ", diffusion_eigenvalues.shape)
+    print("Diffusion eigenvalues shape: ", diffusion_eigenvalues.shape)
     print("GMM eigenvalues shape: ", gmm_eigenvalues.shape)
 
     # assert real_eigenvalues.shape == diffusion_eigenvalues.shape == gmm_eigenvalues.shape, "Eigenvalues shapes do not match"
@@ -38,14 +38,14 @@ def plot_spectra_from_npy(
         color="tab:blue",
         label="Real",
     )
-    # plt.hist(
-    #     diffusion_eigenvalues,
-    #     bins=bins,
-    #     density=density,
-    #     alpha=0.5,
-    #     color="tab:orange",
-    #     label="Diffusion",
-    # )
+    plt.hist(
+        diffusion_eigenvalues,
+        bins=bins,
+        density=density,
+        alpha=0.5,
+        color="tab:orange",
+        label="Diffusion",
+    )
     plt.hist(
         gmm_eigenvalues,
         bins=bins,
