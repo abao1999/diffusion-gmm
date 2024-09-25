@@ -159,6 +159,8 @@ class ImageGMM(GMM):
         """
         mean, covariance = self.mean, self.covariance
 
+        print("mean shape: ", mean.shape)
+        print("Generating samples...")
         samples = np.random.multivariate_normal(mean, covariance, size=n_samples)
 
         sample_shape = samples[0].shape

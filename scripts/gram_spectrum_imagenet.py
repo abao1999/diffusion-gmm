@@ -24,33 +24,19 @@ from diffusion_gmm.utils import (
 WORK_DIR = os.getenv("WORK", "")
 DATA_DIR = os.path.join(WORK_DIR, "vision_datasets")
 
-CIFAR10_CLASSES = [
-    "airplane",
-    "automobile",
-    "bird",
-    "cat",
-    "deer",
-    "dog",
-    "frog",
-    "horse",
-    "ship",
-    "truck",
-]
-
-
 def main(
     mode: str,
     cnn_model_id: Optional[str] = None,
     hook_layer: int = 10,
     num_images: int = 1024,
     batch_size: int = 64,
-    target_class: Optional[int] = None,
+    target_class_name: str = None,
     verbose: bool = False,
     save_dir: str = "results",
     save_name: str = "gram_spectrum.npy",
 ) -> None:
     """
-    Compute the Gram spectrum of a pre-trained CNN model on CIFAR10 data
+    Compute the Gram spectrum of a pre-trained CNN model on Imagenet data
     TODO: Drop-in support for other datasets and models
     """
 
@@ -76,30 +62,31 @@ def main(
 
     transform = transforms.Compose(
         [
-            # transforms.Resize(256),
-            # transforms.CenterCrop(224),
+            transforms.Resize(32),
+            transforms.CenterCrop(32),
             transforms.ToTensor(),
         ]
     )
 
     if verbose:
         print("CNN model ID: ", cnn_model_id)
-        print("Target class: ", target_class)
+        print("Target class: ", target_class_name)
         print("Transform: ", transform)
         print("Num images: ", num_images)
 
     if mode == "diffusion":
-        # Load the generated CIFAR10 data from the diffusion model
+        # Load the generated Imagenet data from the diffusion model
+        root = os.path.join(DATA_DIR, "diffusion_imagenet")
+        print(f"Loading Imagenet data from {root}")
         data = datasets.ImageFolder(
-            root=os.path.join(DATA_DIR, "diffusion_cifar10"), transform=transform
+            root=root, transform=transform
         )
 
     elif mode == "gmm":
-        # # Load the generated CIFAR10 data from the GMM model stored as .npy files
+        # # Load the generated Imagenet data from the GMM model stored as .npy files
 
-        root = os.path.join(DATA_DIR, "gmm_cifar10")
-        if target_class is not None:
-            target_class_name = CIFAR10_CLASSES[target_class]
+        root = os.path.join(DATA_DIR, "gmm_imagenet")
+        if target_class_name is not None:
             root = os.path.join(root, target_class_name)
             # check if root exists
             if not os.path.exists(root):
@@ -123,34 +110,22 @@ def main(
         data = NumpyDataset(root=root, transform=None)
 
     elif mode == "real":
-        # Load the real CIFAR10 data from torchvision
-        data = datasets.CIFAR10(
-            root=os.path.join(DATA_DIR, "cifar10"),
-            train=True,  # TODO: change to False
-            download=True,
-            transform=transform,
-            target_transform=None
-            if target_class is None
-            else lambda y: y == target_class,
+        # Load the real ImageNet data
+        root = os.path.join(DATA_DIR, "imagenet")
+        print(f"Loading Imagenet data from {root}")
+        data = datasets.ImageFolder(
+            root=root, transform=transform
         )
-
     else:
         raise ValueError(f"Invalid mode: {mode}")
 
-    # classes = data.classes
-    # print(f"Classes: {classes}")
-    # print(f"Targets: {data.targets}")
-
-    if target_class is not None:
+    if target_class_name is not None:
         # Create a sampler that only selects images from the target class
-        indices = [i for i, (_, label) in enumerate(DataLoader(data)) if label]
-        print(f"Number of images of class {target_class}: {len(indices)}")
+        indices = [i for i, (_, label) in enumerate(DataLoader(data)) if label is not None]
+        print(f"Number of images of class {target_class_name}: {len(indices)}")
         sel_indices = indices[:num_images] if len(indices) >= num_images else indices
         custom_sampler = SubsetRandomSampler(sel_indices)
     else:
-        # custom_sampler = RandomSampler(data, replacement=False, num_samples=num_images)
-        # # custom_sampler = SubsetRandomSampler(range(num_images))
-
         # choose num_images random indices from the dataset
         num_tot_samples = len(data)
         print("len data: ", num_tot_samples)
@@ -192,7 +167,7 @@ def main(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Compute the Gram spectrum of a pre-trained CNN model on CIFAR10 data"
+        description="Compute the Gram spectrum of a pre-trained CNN model on Imagenet data"
     )
     parser.add_argument(
         "mode", type=str, help="Mode to run in: real, diffusion, or gmm"
@@ -213,19 +188,19 @@ if __name__ == "__main__":
         "--batch_size", type=int, default=64, help="Batch size for dataloader"
     )
     parser.add_argument(
-        "--target_class", type=int, default=None, help="Target class for real data"
+        "--target_class_name", type=str, default=None, help="Target class name for real data"
     )
     args = parser.parse_args()
     print("Arguments: ", args)
 
     # TODO: this is currently hard-coded
-    dataset = "cifar10"
+    dataset = "imagenet"
 
     cnn_model_id = args.cnn_model
     hook_layer = args.hook_layer
     num_images = args.num_images
     mode = args.mode
-    target_class = args.target_class
+    target_class_name = args.target_class_name
 
     # book-keeping for save names
     npy_save_dir = "results"
@@ -235,14 +210,13 @@ if __name__ == "__main__":
     npy_save_name = f"{dataset}_gram_spectrum.npy"
     fig_save_name = f"{dataset}_gram_spectrum.png"
 
-    if target_class is not None:
-        target_class_name = CIFAR10_CLASSES[target_class]
+    if target_class_name is not None:
         print(f"Target class name: {target_class_name}")
         npy_save_name = f"{dataset}_{target_class_name}_gram_spectrum.npy"
         fig_save_name = f"{dataset}_{target_class_name}_gram_spectrum.png"
 
     if mode == "diffusion":
-        diffusion_model = "ddpm"
+        diffusion_model = "diffusion_DiT"
         npy_save_name = f"{diffusion_model}_{npy_save_name}"
         fig_save_name = f"{diffusion_model}_{fig_save_name}"
     elif mode == "gmm":
@@ -263,7 +237,7 @@ if __name__ == "__main__":
             cnn_model_id=cnn_model_id,
             hook_layer=hook_layer,
             num_images=num_images,
-            target_class=target_class,
+            target_class_name=target_class_name,
             verbose=True,
             save_dir=npy_save_dir,
             save_name=npy_save_name,

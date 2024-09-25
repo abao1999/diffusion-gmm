@@ -106,7 +106,7 @@ def save_images_grid(
     num_images = grid_shape[0] * grid_shape[1]
     assert num_images <= images.shape[0], "Fewer images than grid spaces!"
 
-    print(f"Populating grid of images wit the first {num_images} images")
+    print(f"Populating grid of images with the first {num_images} images")
     images = images[:num_images]
     _, _, w, h = images.shape
     n_rows = w * grid_shape[0]
@@ -136,6 +136,7 @@ def save_and_plot_samples(
     save_grid_dir: Optional[str] = None,
     save_grid_shape: Tuple[int, int] = (10, 10),
     process_fn: Optional[Callable[[np.ndarray], np.ndarray]] = None,
+    overwrite: bool = False,
 ) -> None:
     """
     Save and plot samples to data directory, and optionally saves grid of subset of samples
@@ -176,13 +177,29 @@ def save_and_plot_samples(
                 grid_shape=save_grid_shape,
             )
 
+        last_sample_index = -1
+
+        if not overwrite:
+            print("Checking for existing samples in save_dir...")
+            # find the last sample index in save_dir
+            sample_files = [
+                f for f in os.listdir(save_dir) if os.path.isfile(os.path.join(save_dir, f))
+            ]
+            sample_indices = [
+                int(f.split("_")[-1].split(".")[0]) for f in sample_files if "sample" in f
+            ]
+            if sample_indices:
+                last_sample_index = max(sample_indices)
+            print("Last sample index: ", last_sample_index)
+
         # save all samples as png images in save_dir
         for i, img in enumerate(samples):
             # Reorder dimensions to (h, w, c)
             img = np.transpose(img, (1, 2, 0))
             # convert to Image PIL type
             img = Image.fromarray(img)
-            save_path = os.path.join(save_dir, f"sample_{i}.png")
+            sample_idx = last_sample_index + i + 1
+            save_path = os.path.join(save_dir, f"sample_{sample_idx}.png")
             img.save(save_path)
 
     else:

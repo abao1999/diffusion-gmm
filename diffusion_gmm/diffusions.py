@@ -1,12 +1,14 @@
 import os
-from typing import Optional
+from typing import Optional, List
 
 import numpy as np
 import torch
 from diffusers import (
-    DDIMPipeline,  # type: ignore
-    DiffusionPipeline,  # type: ignore
-    StableDiffusionPipeline,  # type: ignore
+    DDIMPipeline,  
+    DiffusionPipeline,  
+    StableDiffusionPipeline,
+    DiTPipeline,
+    DPMSolverMultistepScheduler
 )
 from tqdm.auto import tqdm
 
@@ -133,6 +135,51 @@ def generate_image_DiffusionPipe(
 
     # convert samples to numpy array
     samples = samples.cpu().numpy()
+    save_and_plot_samples(
+        samples,
+        save_dir,
+        **plot_kwargs,
+    )
+
+    return samples
+
+
+def generate_DiTPipe(
+    class_ids: List[int] = [0],
+    num_inference_steps: int = 50, # defaults to 50
+    guidance_scale: float = 4.0, # default, high val: image closer to prompt, less image quality
+    save_dir: str = "figs",
+    plot_kwargs: dict = {},
+    rseed: int = 42,
+    device: str = "cpu",
+) -> np.ndarray:
+    """
+    Generate images using the Diffusion Transformer model from the Hugging Face Hub
+    """
+    pipe = DiTPipeline.from_pretrained("facebook/DiT-XL-2-256", torch_dtype=torch.float16)
+    pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config)
+    pipe = pipe.to(device)
+
+    # set random seed
+    generator = torch.manual_seed(rseed)
+    output = pipe(
+        class_labels=class_ids, 
+        num_inference_steps=num_inference_steps, 
+        guidance_scale=guidance_scale, 
+        generator=generator,
+        output_type='npy' # only does anything if 'pil' in which case it returns PIL images
+        )
+    
+    # get the numpy images
+    samples = output.images
+    # print("saving sample intermediate")
+    # np.save("sample_intermediate.npy", samples)
+    print("Transposing samples")
+    samples = samples.transpose(0, 3, 1, 2)
+
+    # Save the generated images
+    print("Saving generated images")
+    print("Sample shape:", samples.shape)
     save_and_plot_samples(
         samples,
         save_dir,
