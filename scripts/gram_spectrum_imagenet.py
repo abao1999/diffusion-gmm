@@ -24,6 +24,7 @@ from diffusion_gmm.utils import (
 WORK_DIR = os.getenv("WORK", "")
 DATA_DIR = os.path.join(WORK_DIR, "vision_datasets")
 
+
 def main(
     mode: str,
     cnn_model_id: Optional[str] = None,
@@ -78,9 +79,7 @@ def main(
         # Load the generated Imagenet data from the diffusion model
         root = os.path.join(DATA_DIR, "diffusion_imagenet")
         print(f"Loading Imagenet data from {root}")
-        data = datasets.ImageFolder(
-            root=root, transform=transform
-        )
+        data = datasets.ImageFolder(root=root, transform=transform)
 
     elif mode == "gmm":
         # # Load the generated Imagenet data from the GMM model stored as .npy files
@@ -113,15 +112,15 @@ def main(
         # Load the real ImageNet data
         root = os.path.join(DATA_DIR, "imagenet")
         print(f"Loading Imagenet data from {root}")
-        data = datasets.ImageFolder(
-            root=root, transform=transform
-        )
+        data = datasets.ImageFolder(root=root, transform=transform)
     else:
         raise ValueError(f"Invalid mode: {mode}")
 
     if target_class_name is not None:
         # Create a sampler that only selects images from the target class
-        indices = [i for i, (_, label) in enumerate(DataLoader(data)) if label is not None]
+        indices = [
+            i for i, (_, label) in enumerate(DataLoader(data)) if label is not None
+        ]
         print(f"Number of images of class {target_class_name}: {len(indices)}")
         sel_indices = indices[:num_images] if len(indices) >= num_images else indices
         custom_sampler = SubsetRandomSampler(sel_indices)
@@ -188,7 +187,10 @@ if __name__ == "__main__":
         "--batch_size", type=int, default=64, help="Batch size for dataloader"
     )
     parser.add_argument(
-        "--target_class_name", type=str, default=None, help="Target class name for real data"
+        "--target_class_name",
+        type=str,
+        default=None,
+        help="Target class name for real data",
     )
     args = parser.parse_args()
     print("Arguments: ", args)

@@ -85,16 +85,12 @@ if __name__ == "__main__":
         # Load the real ImageNet data
         root = os.path.join(DATA_DIR, "diffusion_imagenet")
         print(f"Loading Imagenet data from {root}")
-        data = datasets.ImageFolder(
-            root=root, transform=transform
-        )
+        data = datasets.ImageFolder(root=root, transform=transform)
     else:
         # Load the real ImageNet data
         root = os.path.join(DATA_DIR, "imagenet")
         print(f"Loading Imagenet data from {root}")
-        data = datasets.ImageFolder(
-            root=root, transform=transform
-        )
+        data = datasets.ImageFolder(root=root, transform=transform)
 
     classes = data.classes
     print(f"Classes: {classes}")
@@ -102,7 +98,9 @@ if __name__ == "__main__":
     # filter the target_class_name dataset to include only at most num_images images
     if target_class_name is not None:
         # Create a sampler that only selects images from the target class
-        indices = [i for i, (_, label) in enumerate(DataLoader(data)) if label is not None]
+        indices = [
+            i for i, (_, label) in enumerate(DataLoader(data)) if label is not None
+        ]
         print(f"Number of images of class {target_class_name}: {len(indices)}")
         sel_indices = indices[:num_images] if len(indices) >= num_images else indices
         custom_sampler = SubsetRandomSampler(sel_indices)
@@ -135,7 +133,7 @@ if __name__ == "__main__":
         save_dir = os.path.join(DATA_DIR, "gmm_imagenet", target_class_name)
     else:
         save_dir = os.path.join(DATA_DIR, "gmm_imagenet", "unknown")
-    
+
     os.makedirs(save_dir, exist_ok=True)
     save_name = f"gmm_{dataset_name}"
     print(f"Saving samples generated from the fitted GMM to {save_dir}...")

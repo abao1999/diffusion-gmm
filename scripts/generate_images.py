@@ -4,7 +4,6 @@ import os
 import torch
 
 from diffusion_gmm.diffusions import (
-    generate_ddpm_exposed,
     generate_DiTPipe,
 )
 from diffusion_gmm.utils import default_image_processing_fn
@@ -52,18 +51,18 @@ if __name__ == "__main__":
     # )
 
     class_id = 25
-    class_ids = [25] * args.n_samples # salamander
+    class_ids = [25] * args.n_samples  # salamander
     class_name = "salamander"
     save_dir = os.path.join(DATA_DIR, "diffusion_imagenet", class_name)
     os.makedirs(save_dir, exist_ok=True)
 
     samples = generate_DiTPipe(
-        class_ids=class_ids, 
+        class_ids=class_ids,
         guidance_scale=args.guidance_scale,
         save_dir=save_dir,
         plot_kwargs=PLOT_KWARGS,
         rseed=args.random_seed,
-        device=device, 
+        device=device,
     )
 
     print("Samples shape: ", samples.shape)

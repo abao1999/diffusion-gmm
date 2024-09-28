@@ -1,14 +1,14 @@
 import os
-from typing import Optional, List
+from typing import List, Optional
 
 import numpy as np
 import torch
-from diffusers import (
-    DDIMPipeline,  
-    DiffusionPipeline,  
-    StableDiffusionPipeline,
-    DiTPipeline,
-    DPMSolverMultistepScheduler
+from diffusers import (  # type: ignore
+    DDIMPipeline,  # type: ignore
+    DiffusionPipeline,  # type: ignore
+    DiTPipeline,  # type: ignore
+    DPMSolverMultistepScheduler,  # type: ignore
+    StableDiffusionPipeline,  # type: ignore
 )
 from tqdm.auto import tqdm
 
@@ -18,11 +18,12 @@ from diffusion_gmm.utils import save_and_plot_samples
 
 
 def generate_ddpm_exposed(
-    num_inference_steps: int,
-    num_images: int,
-    save_dir: str,
+    model_id: str = "google/ddpm-cifar10-32",
+    num_inference_steps: int = 50,
+    num_images: int = 1,
+    save_dir: str = "figs",
     plot_kwargs: dict = {},
-    device="cpu",
+    device: str = "cpu",
 ) -> np.ndarray:
     """
     Generate images using the DDPM model from the Hugging Face Hub
@@ -38,7 +39,6 @@ def generate_ddpm_exposed(
 
     """
     # Hugging Face hub directory from which we get the pre-trained CIFAR10 DDPM model's config
-    model_id = "google/ddpm-cifar10-32"
     print("Model ID:", model_id)
 
     # Load the DDPM pipeline with the correct model and scheduler
@@ -145,9 +145,10 @@ def generate_image_DiffusionPipe(
 
 
 def generate_DiTPipe(
+    model_id: str = "facebook/DiT-XL-2-256",
     class_ids: List[int] = [0],
-    num_inference_steps: int = 50, # defaults to 50
-    guidance_scale: float = 4.0, # default, high val: image closer to prompt, less image quality
+    num_inference_steps: int = 50,  # defaults to 50
+    guidance_scale: float = 4.0,  # default, high val: image closer to prompt, less image quality
     save_dir: str = "figs",
     plot_kwargs: dict = {},
     rseed: int = 42,
@@ -156,20 +157,21 @@ def generate_DiTPipe(
     """
     Generate images using the Diffusion Transformer model from the Hugging Face Hub
     """
-    pipe = DiTPipeline.from_pretrained("facebook/DiT-XL-2-256", torch_dtype=torch.float16)
+    print("Model ID:", model_id)
+    pipe = DiTPipeline.from_pretrained(model_id, torch_dtype=torch.float16)
     pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config)
     pipe = pipe.to(device)
 
     # set random seed
     generator = torch.manual_seed(rseed)
     output = pipe(
-        class_labels=class_ids, 
-        num_inference_steps=num_inference_steps, 
-        guidance_scale=guidance_scale, 
+        class_labels=class_ids,
+        num_inference_steps=num_inference_steps,
+        guidance_scale=guidance_scale,
         generator=generator,
-        output_type='npy' # only does anything if 'pil' in which case it returns PIL images
-        )
-    
+        output_type="npy",  # only does anything if 'pil' in which case it returns PIL images
+    )
+
     # get the numpy images
     samples = output.images
     # print("saving sample intermediate")
@@ -189,6 +191,7 @@ def generate_DiTPipe(
     return samples
 
 
+# Text-to-Image Diffusion Models
 def generate_sb2(
     num_images: int = 1,
     guidance_scale: float = 7.5,

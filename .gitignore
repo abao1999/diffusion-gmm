@@ -4,6 +4,8 @@ tests/another_playground.py
 
 # data directory and files
 data/
+figs/
+tests/figs/
 *.arrow
 *.csv
 *.png
