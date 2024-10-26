@@ -3,6 +3,7 @@ defaults:
   - diffusion
   - gmm
   - dataset
+  - experiment
   # - override hydra/job_logging: disabled 
   - override hydra/hydra_logging: disabled 
 
@@ -10,3 +11,5 @@ hydra:
   output_subdir: null
   run:
     dir: logs
+
+rseed: 0

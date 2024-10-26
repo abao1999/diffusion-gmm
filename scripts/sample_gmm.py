@@ -9,11 +9,13 @@ FIGS_DIR = "figs"
 def main(cfg):
     gmm = ImageGMM(
         n_components=cfg.gmm.n_components,
-        datapath=cfg.gmm.datapath,
+        data_dir=cfg.gmm.data_dir,
         dataset_name=cfg.gmm.dataset_name,
+        covariance_type=cfg.gmm.covariance_type,
         batch_size=cfg.gmm.batch_size,
         custom_transform=cfg.gmm.custom_transform,
         verbose=True,
+        rseed=cfg.rseed,
     )
 
     gmm.fit(cfg.gmm.n_samples_fit)
@@ -21,12 +23,12 @@ def main(cfg):
     gmm.save_samples(
         n_samples=cfg.gmm.n_samples_generate,
         save_dir=cfg.gmm.save_dir,
-        plot_kwargs={
-            "save_grid_dir": FIGS_DIR,
-            "save_grid_shape": (10, 10),
-            "process_fn": None,
-        },
     )
+
+    means = gmm.means_
+    print("means.shape: ", means.shape)  # type: ignore
+    covariances = gmm.covariances_
+    print("covariances.shape: ", covariances.shape)  # type: ignore
 
 
 if __name__ == "__main__":

@@ -8,27 +8,6 @@ import torch
 from PIL import Image
 
 
-# Function to compute the Gram matrix
-def compute_gram_matrix(features: np.ndarray) -> np.ndarray:
-    b, c, h, w = features.shape
-    features = features.reshape(b, c, h * w)
-    gram_matrix = np.matmul(features, features.transpose(0, 2, 1))
-    # features = features.view(b, c, h * w)
-    # gram_matrix = torch.bmm(features, features.transpose(1, 2))
-    return gram_matrix
-
-
-# Function to get eigenvalues of the Gram matrix
-def get_gram_spectrum(gram_matrix: np.ndarray) -> np.ndarray:
-    # Compute the eigenvalues (complex values) of each Gram matrix in the batch
-    eigenvalues = np.linalg.eigvals(gram_matrix)
-    # Extract the real part of the eigenvalues
-    real_eigenvalues = eigenvalues.real
-    # Flatten the eigenvalues to form a 1D array
-    all_eigenvalues = real_eigenvalues.flatten()
-    return all_eigenvalues
-
-
 # plot histogram from npy file
 def plot_gram_spectrum(
     all_eigenvalues: np.ndarray,
@@ -152,7 +131,6 @@ def save_and_plot_samples(
         save_grid_shape: Tuple of grid shape for the grid of samples
         save_grid_dir: Directory to save the grid of samples
 
-    TODO: keep as torch.Tensor or compute to np.ndarray?
     """
     os.makedirs(save_dir, exist_ok=True)
     print("Saving samples to ", save_dir)
@@ -183,10 +161,14 @@ def save_and_plot_samples(
             print("Checking for existing samples in save_dir...")
             # find the last sample index in save_dir
             sample_files = [
-                f for f in os.listdir(save_dir) if os.path.isfile(os.path.join(save_dir, f))
+                f
+                for f in os.listdir(save_dir)
+                if os.path.isfile(os.path.join(save_dir, f))
             ]
             sample_indices = [
-                int(f.split("_")[-1].split(".")[0]) for f in sample_files if "sample" in f
+                int(f.split("_")[-1].split(".")[0])
+                for f in sample_files
+                if "sample" in f
             ]
             if sample_indices:
                 last_sample_index = max(sample_indices)
@@ -210,36 +192,6 @@ def save_and_plot_samples(
         for i, img in enumerate(samples):
             save_path = os.path.join(save_dir, f"sample_{i}.npy")
             np.save(save_path, img)
-
-
-def plot_pixel_intensity_hist(
-    samples: np.ndarray,
-    bins: int = 30,
-    save_dir: str = "figs",
-    save_name: str = "pixel_intensities.png",
-    verbose: bool = False,
-) -> None:
-    """
-    Plot the histogram of pixel intensity
-    """
-    # number of samples should be batch dimension (first dimension)
-    num_samples = samples.shape[0]
-
-    if verbose:
-        print("Plotting histogram of pixel intensity...")
-        print(f"Using {num_samples} samples and {bins} bins for histogram.")
-
-    # Flatten the samples for visualization (optional)
-    flattened_samples = samples.flatten()
-
-    # Plot histogram of the generated samples
-    plt.figure(figsize=(10, 6))
-    plt.hist(flattened_samples, bins=bins, color="tab:blue", alpha=0.7)
-    plt.title("Pixel Intensity Histogram")
-    plt.xlabel("Pixel Intensity")
-    plt.ylabel("Frequency")
-    plt.grid(True)
-    plt.savefig(os.path.join(save_dir, save_name), dpi=300)
 
 
 def default_image_processing_fn(

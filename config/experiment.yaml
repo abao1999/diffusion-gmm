@@ -1,0 +1,13 @@
+gs_exp:
+  cnn_model_id: null
+  hook_layer: null
+  data_dir: "/stor/work/AMDG_Gilpin_Summer2024/vision_datasets/cifar10/"
+  dataset_name: null
+  batch_size: 64
+  custom_transform: null
+  num_samples: 1024
+  save_dir: "results/"
+  save_name: "gram_spectrum.npy"
+  target_class: null
+  load_npy: false
+  verbose: true

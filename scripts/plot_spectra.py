@@ -1,14 +1,15 @@
 import argparse
 import os
+from typing import Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
 
 
 def plot_spectra_from_npy(
-    real_npy_filepath: str = "gram_spectrum.npy",
-    diffusion_npy_filepath: str = "diffusion_gram_spectrum.npy",
-    gmm_npy_filepath: str = "gmm_gram_spectrum.npy",
+    real_path: Optional[str] = None,
+    diffusion_path: Optional[str] = None,
+    gmm_path: Optional[str] = None,
     save_dir: str = "figs",
     save_name: str = "all_spectra.png",
 ):
@@ -16,16 +17,22 @@ def plot_spectra_from_npy(
     Plot spectra of Gram matrices from all three modes considered:
         1. Real images, 2. Diffusion generated images, 3. GMM generated images
     """
-    # Load the eigenvalues computed from the Gram matrices
-    real_eigenvalues = np.load(real_npy_filepath)
-    diffusion_eigenvalues = np.load(diffusion_npy_filepath)
-    gmm_eigenvalues = np.load(gmm_npy_filepath)
+    os.makedirs(save_dir, exist_ok=True)
+    # Load the eigenvalues computed from the Gram matrices if filepaths are valid
+    real_eigenvalues = np.array([])
+    diffusion_eigenvalues = np.array([])
+    gmm_eigenvalues = np.array([])
+
+    if real_path is not None and os.path.isfile(real_path):
+        real_eigenvalues = np.load(real_path)
+    if diffusion_path is not None and os.path.isfile(diffusion_path):
+        diffusion_eigenvalues = np.load(diffusion_path)
+    if gmm_path is not None and os.path.isfile(gmm_path):
+        gmm_eigenvalues = np.load(gmm_path)
 
     print("Real eigenvalues shape: ", real_eigenvalues.shape)
     print("Diffusion eigenvalues shape: ", diffusion_eigenvalues.shape)
     print("GMM eigenvalues shape: ", gmm_eigenvalues.shape)
-
-    # assert real_eigenvalues.shape == diffusion_eigenvalues.shape == gmm_eigenvalues.shape, "Eigenvalues shapes do not match"
 
     bins = 100
     density = True
@@ -67,26 +74,19 @@ def plot_spectra_from_npy(
 
 
 if __name__ == "__main__":
-    data_dir = "results"
-    dataset_name = "cifar10"
-
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--target_class_name", type=str, default=None, help="Target class for real data"
-    )
+    parser.add_argument("--real_path", type=str, default=None)
+    parser.add_argument("--gmm_path", type=str, default=None)
+    parser.add_argument("--diffusion_path", type=str, default=None)
     args = parser.parse_args()
-    target_class_name = args.target_class_name
-
-    path_suffix = "gram_spectrum.npy"
-    if target_class_name is not None:
-        path_suffix = f"{target_class_name}_{path_suffix}"
+    gmm_path = args.gmm_path
+    diffusion_path = args.diffusion_path
+    real_path = args.real_path
 
     plot_spectra_from_npy(
-        real_npy_filepath=os.path.join(data_dir, f"{dataset_name}_{path_suffix}"),
-        diffusion_npy_filepath=os.path.join(
-            data_dir, f"ddpm_{dataset_name}_{path_suffix}"
-        ),
-        gmm_npy_filepath=os.path.join(data_dir, f"gmm_{dataset_name}_{path_suffix}"),
+        real_path=real_path,
+        gmm_path=gmm_path,
+        diffusion_path=diffusion_path,
         save_dir="figs",
-        save_name=f"{target_class_name or 'all'}_spectra.png",
+        save_name="all_spectra.png",
     )

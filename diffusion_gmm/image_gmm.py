@@ -11,24 +11,89 @@ from torchvision import datasets
 from torchvision.datasets import ImageFolder, VisionDataset
 from tqdm.auto import tqdm
 
-from diffusion_gmm.utils import save_and_plot_samples
-
 
 @dataclass
 class ImageGMM(GaussianMixture):
     """
     Gaussian Mixture Model (GMM) for image data
+    Args:
+        n_components: The number of mixture components.
+        data_dir: The path to the folder to be loaded as imagefolder.
+        dataset_name: (Optional) The name of the dataset, to use custom VisionDataset class for loading. For example, Imagenet or CIFAR10.
+        covariance_type: The type of covariance matrix to use.
+            'full': each component has its own general covariance matrix.
+            'tied': all components share the same general covariance matrix.
+            'diag': each component has its own diagonal covariance matrix.
+            'spherical': each component has its own single variance.
+        batch_size: batch size fo dataloader (loading images)
+        custom_transform: (Optional) A custom transform to apply to the data.
+
+    ----------------------------------------------------------------
+    Attributes:
+        From GaussianMixture:
+        weights_ : array-like of shape (n_components,)
+            The weights of each mixture components.
+
+        means_ : array-like of shape (n_components, n_features)
+            The mean of each mixture component.
+
+        covariances_ : array-like
+            The covariance of each mixture component.
+            The shape depends on `covariance_type`::
+
+                (n_components,)                        if 'spherical',
+                (n_features, n_features)               if 'tied',
+                (n_components, n_features)             if 'diag',
+                (n_components, n_features, n_features) if 'full'
+
+        precisions_ : array-like
+            The precision matrices for each component in the mixture. A precision
+            matrix is the inverse of a covariance matrix. A covariance matrix is
+            symmetric positive definite so the mixture of Gaussian can be
+            equivalently parameterized by the precision matrices. Storing the
+            precision matrices instead of the covariance matrices makes it more
+            efficient to compute the log-likelihood of new samples at test time.
+            The shape depends on `covariance_type` in the same way as `covariances_`.
+
+        precisions_cholesky_ : array-like
+            The cholesky decomposition of the precision matrices of each mixture
+            component.
+
+        converged_ : bool
+            True when convergence of the best fit of EM was reached, False otherwise.
+
+        n_iter_ : int
+            Number of step used by the best fit of EM to reach the convergence.
+
+        lower_bound_ : float
+            Lower bound value on the log-likelihood (of the training data with
+            respect to the model) of the best fit of EM.
+
+        n_features_in_ : int
+            Number of features seen during :term:`fit`.
+
+        feature_names_in_ : ndarray of shape (`n_features_in_`,)
+            Names of features seen during :term:`fit`. Defined only when `X`
+            has feature names that are all strings.
+
     """
 
     n_components: int
-    datapath: str
+    data_dir: str
     dataset_name: Optional[str] = None
+    covariance_type: str = "full"
     batch_size: int = 32
     custom_transform: Optional[transforms.Compose] = None
     verbose: bool = False
+    rseed: int = 99
 
     def __post_init__(self):
+        if not os.path.exists(self.data_dir):
+            raise FileNotFoundError(f"Data directory {self.data_dir} does not exist")
+
         super().__init__(n_components=self.n_components)
+
+        self.rng = np.random.default_rng(self.rseed)
         if self.custom_transform is None:
             self.custom_transform = transforms.Compose([transforms.ToTensor()])
         self.data = self._get_dataset()
@@ -40,21 +105,21 @@ class ImageGMM(GaussianMixture):
     def _get_dataset(self) -> VisionDataset:
         if self.dataset_name is None:
             data = ImageFolder(
-                root=self.datapath,
+                root=self.data_dir,
                 transform=self.custom_transform,
                 target_transform=None,
             )
         elif self.dataset_name == "cifar10":
             # Load the real CIFAR10 train split from torchvision
             data = datasets.CIFAR10(
-                root=self.datapath,
+                root=self.data_dir,
                 train=True,
                 download=True,
                 transform=self.custom_transform,
             )
         elif self.dataset_name == "imagenet":
             data = datasets.ImageNet(
-                root=self.datapath,
+                root=self.data_dir,
                 split="train",
                 download=True,
                 transform=self.custom_transform,
@@ -83,7 +148,7 @@ class ImageGMM(GaussianMixture):
             if num_samples > num_tot_samples:
                 indices = list(range(num_tot_samples))
             else:
-                indices = np.random.choice(
+                indices = self.rng.choice(
                     num_tot_samples, num_samples, replace=False
                 ).tolist()
         else:
@@ -131,7 +196,6 @@ class ImageGMM(GaussianMixture):
         self,
         n_samples: int,
         save_dir: str,
-        plot_kwargs: dict = {},
     ) -> np.ndarray:
         """
         Generate samples from the fitted GMM and save them as images with self.img_shape
@@ -149,10 +213,11 @@ class ImageGMM(GaussianMixture):
             print("Samples shape: ", samples.shape)
             print(f"Saving {n_samples} samples from the fitted GMM to {save_dir}...")
 
-        save_and_plot_samples(
-            samples,
-            save_dir,
-            **plot_kwargs,
-        )
+        os.makedirs(save_dir, exist_ok=True)
+        print("Saving samples to ", save_dir)
+
+        for i, img in enumerate(samples):
+            save_path = os.path.join(save_dir, f"sample_{i}.npy")
+            np.save(save_path, img)
 
         return samples
