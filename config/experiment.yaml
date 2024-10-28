@@ -13,11 +13,16 @@ gram_experiment:
   verbose: true
 
 classifier_experiment:
-  data_dir: "/stor/work/AMDG_Gilpin_Summer2024/vision_datasets/cifar10/"
-  class_list: ["dog", "cat"]
+  data_dir: null
+  class_list: null
   dataset_name: null
   batch_size: 64
   custom_transform: null
-  num_samples: 1024
+  num_samples: null
+  num_epochs: 40
+  lr: 1e-3
+  split_ratio: 0.8
   plot_history: true
   device: cuda
+  load_npy: false
+  verbose: true

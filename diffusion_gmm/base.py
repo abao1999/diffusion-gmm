@@ -1,7 +1,7 @@
 import os
 import warnings
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import Callable, Dict, Optional, Tuple
 
 import numpy as np
 import torch
@@ -93,7 +93,7 @@ class ImageExperiment:
         return shape
 
     def _build_dataloader(
-        self, num_samples: int, target_class: Optional[Union[str, List[str]]] = None
+        self, num_samples: int, target_class: Optional[str] = None
     ) -> DataLoader:
         num_tot_samples = len(self.data)
         if target_class is None:
@@ -104,12 +104,8 @@ class ImageExperiment:
                     num_tot_samples, num_samples, replace=False
                 ).tolist()
         else:
-            # Ensure target_class is a list
-            if isinstance(target_class, str):
-                target_class = [target_class]
-
             # Convert target_class from string to integer index
-            target_class_indices = [self.class_to_idx[cls] for cls in target_class]
+            target_class_idx = self.class_to_idx[target_class]
 
             # For datasets like CIFAR10, use targets attribute
             if hasattr(self.data, "targets"):
@@ -122,23 +118,12 @@ class ImageExperiment:
                     "Dataset doesn't have 'targets' or 'samples' attribute"
                 )
 
-            # TODO: change this to use Subset on the dataset, to subset the data into selected classes
-            # and use weighted subset sampler
             indices = []
-            class_counts = {cls: 0 for cls in target_class_indices}
-            max_samples_per_class = num_samples // len(target_class_indices)
-
             for idx, class_idx in enumerate(targets):
-                if all(
-                    count == max_samples_per_class for count in class_counts.values()
-                ):
+                if len(indices) == num_samples:
                     break
-                if (
-                    class_idx in target_class_indices
-                    and class_counts[class_idx] < max_samples_per_class
-                ):
+                if class_idx == target_class_idx:
                     indices.append(idx)
-                    class_counts[class_idx] += 1
 
         if self.verbose:
             print(f"Sampling from {len(indices)} valid samples")
