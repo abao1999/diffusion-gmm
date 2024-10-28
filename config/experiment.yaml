@@ -1,4 +1,4 @@
-gs_exp:
+gram_experiment:
   cnn_model_id: null
   hook_layer: null
   data_dir: "/stor/work/AMDG_Gilpin_Summer2024/vision_datasets/cifar10/"
@@ -11,3 +11,13 @@ gs_exp:
   target_class: null
   load_npy: false
   verbose: true
+
+classifier_experiment:
+  data_dir: "/stor/work/AMDG_Gilpin_Summer2024/vision_datasets/cifar10/"
+  class_list: ["dog", "cat"]
+  dataset_name: null
+  batch_size: 64
+  custom_transform: null
+  num_samples: 1024
+  plot_history: true
+  device: cuda

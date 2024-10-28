@@ -18,7 +18,7 @@ def main(cfg):
         rseed=cfg.rseed,
     )
 
-    gmm.fit(cfg.gmm.n_samples_fit)
+    gmm.fit(cfg.gmm.n_samples_fit, target_class=cfg.gmm.target_class)
 
     gmm.save_samples(
         n_samples=cfg.gmm.n_samples_generate,
