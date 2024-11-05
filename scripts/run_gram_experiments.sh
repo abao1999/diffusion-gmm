@@ -33,31 +33,31 @@ python scripts/sample_gmm.py \
 
 # compute gram spectrum for imagenet64 class
 python scripts/compute_gram_spectrum.py \
-        gram_experiment.data_dir=$data_dir/imagenette64 \
-        gram_experiment.batch_size=32 \
-        gram_experiment.target_class=$target_class \
-        gram_experiment.num_samples=$n_samples \
-        gram_experiment.save_dir=results/gram_spectrum \
-        gram_experiment.save_name=imagenet64_${target_class}_gram_spectrum.npy \
+        experiment.data_dir=$data_dir/imagenette64 \
+        experiment.batch_size=32 \
+        experiment.target_class=$target_class \
+        experiment.num_samples=$n_samples \
+        experiment.save_dir=results/gram_spectrum \
+        experiment.save_name=imagenet64_${target_class}_gram_spectrum.npy \
 
 # compute gram spectrum for imagenet64 class gmm samples
 python scripts/compute_gram_spectrum.py \
-        gram_experiment.data_dir=$data_dir/gmm_imagenet64 \
-        gram_experiment.load_npy=true \
-        gram_experiment.batch_size=32 \
-        gram_experiment.target_class=$target_class \
-        gram_experiment.num_samples=$n_samples \
-        gram_experiment.save_dir=results/gram_spectrum \
-        gram_experiment.save_name=imagenet64_${target_class}_gmm_gram_spectrum.npy \
+        experiment.data_dir=$data_dir/gmm_imagenet64 \
+        experiment.load_npy=true \
+        experiment.batch_size=32 \
+        experiment.target_class=$target_class \
+        experiment.num_samples=$n_samples \
+        experiment.save_dir=results/gram_spectrum \
+        experiment.save_name=imagenet64_${target_class}_gmm_gram_spectrum.npy \
 
 # compute gram spectrum for imagenet64 class diffusion samples
 python scripts/compute_gram_spectrum.py \
-        gram_experiment.data_dir=$data_dir/edm_imagenet64 \
-        gram_experiment.batch_size=32 \
-        gram_experiment.target_class=$target_class \
-        gram_experiment.num_samples=$n_samples \
-        gram_experiment.save_dir=results/gram_spectrum \
-        gram_experiment.save_name=imagenet64_${target_class}_edm_gram_spectrum.npy \
+        experiment.data_dir=$data_dir/edm_imagenet64 \
+        experiment.batch_size=32 \
+        experiment.target_class=$target_class \
+        experiment.num_samples=$n_samples \
+        experiment.save_dir=results/gram_spectrum \
+        experiment.save_name=imagenet64_${target_class}_edm_gram_spectrum.npy \
 
 python scripts/plot_spectra.py \
         --real_path results/gram_spectrum/imagenet64_${target_class}_gram_spectrum.npy \
@@ -87,29 +87,29 @@ python scripts/plot_spectra.py \
 
 # # compute gram spectrum for cifar10 all classes
 # python scripts/compute_gram_spectrum.py \
-#         gram_experiment.data_dir=$data_dir/cifar10 \
-#         gram_experiment.dataset_name=cifar10 \
-#         gram_experiment.batch_size=64 \
-#         gram_experiment.num_samples=$n_samples \
-#         gram_experiment.save_dir=results/gram_spectrum \
-#         gram_experiment.save_name=cifar10_gram_spectrum.npy \
+#         experiment.data_dir=$data_dir/cifar10 \
+#         experiment.dataset_name=cifar10 \
+#         experiment.batch_size=64 \
+#         experiment.num_samples=$n_samples \
+#         experiment.save_dir=results/gram_spectrum \
+#         experiment.save_name=cifar10_gram_spectrum.npy \
 
 # # compute gram spectrum for cifar10 all classes gmm samples
 # python scripts/compute_gram_spectrum.py \
-#         gram_experiment.data_dir=$data_dir/gmm_cifar10 \
-#         gram_experiment.load_npy=true \
-#         gram_experiment.batch_size=64 \
-#         gram_experiment.num_samples=$n_samples \
-#         gram_experiment.save_dir=results/gram_spectrum \
-#         gram_experiment.save_name=cifar10_gmm_gram_spectrum.npy \
+#         experiment.data_dir=$data_dir/gmm_cifar10 \
+#         experiment.load_npy=true \
+#         experiment.batch_size=64 \
+#         experiment.num_samples=$n_samples \
+#         experiment.save_dir=results/gram_spectrum \
+#         experiment.save_name=cifar10_gmm_gram_spectrum.npy \
 
 # # compute gram spectrum for cifar10 all classes diffusion samples
 # python scripts/compute_gram_spectrum.py \
-#         gram_experiment.data_dir=$data_dir/diffusion_cifar10 \
-#         gram_experiment.batch_size=64 \
-#         gram_experiment.num_samples=$n_samples \
-#         gram_experiment.save_dir=results/gram_spectrum \
-#         gram_experiment.save_name=cifar10_diffusion_gram_spectrum.npy \
+#         experiment.data_dir=$data_dir/diffusion_cifar10 \
+#         experiment.batch_size=64 \
+#         experiment.num_samples=$n_samples \
+#         experiment.save_dir=results/gram_spectrum \
+#         experiment.save_name=cifar10_diffusion_gram_spectrum.npy \
 
 # python scripts/plot_spectra.py \
 #         --real_path results/gram_spectrum/cifar10_gram_spectrum.npy \

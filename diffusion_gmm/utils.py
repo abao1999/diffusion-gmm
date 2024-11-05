@@ -1,6 +1,6 @@
 import os
 import warnings
-from typing import Callable, Optional, Tuple, Union
+from typing import Callable, List, Optional, Tuple, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -212,3 +212,34 @@ def default_image_processing_fn(
     # samples = torch.clamp(samples, min_val, max_val)
     # samples = samples.to(torch.uint8)
     return samples
+
+
+def plot_training_history(
+    train_loss_history: List[float],
+    test_loss_history: List[float],
+    accuracy_history: List[float],
+    save_dir: str = "figs",
+    save_name: str = "loss_accuracy.png",
+) -> None:
+    fig, ax1 = plt.subplots()
+
+    os.makedirs(save_dir, exist_ok=True)
+
+    ax1.set_xlabel("Epoch")
+    ax1.set_ylabel("Loss", color="tab:blue")
+    ax1.plot(train_loss_history, label="Train Loss", color="tab:blue")
+    ax1.plot(test_loss_history, label="Test Loss", color="tab:orange")
+    ax1.tick_params(axis="y", labelcolor="tab:blue")
+    ax1.legend(loc="upper left")
+
+    ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
+    ax2.set_ylabel(
+        "Accuracy", color="tab:green"
+    )  # we already handled the x-label with ax1
+    ax2.plot(accuracy_history, label="Accuracy", color="tab:green")
+    ax2.tick_params(axis="y", labelcolor="tab:green")
+    ax2.legend(loc="upper right")
+
+    plt.title("Training and Test Loss with Accuracy")
+    plt.savefig(os.path.join(save_dir, save_name), dpi=300)
+    plt.close()

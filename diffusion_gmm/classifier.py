@@ -1,17 +1,15 @@
 import warnings
-from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
-import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader, Dataset, Subset
+from torchvision.datasets import DatasetFolder
 from tqdm.auto import tqdm
-
-from diffusion_gmm.base import ImageExperiment
 
 
 # Define a simple linear classifier
@@ -26,62 +24,145 @@ class BinaryLinearClassifier(nn.Module):
         return self.sigmoid(self.fc(x))
 
 
-class BinarySubset(Dataset):
-    def __init__(self, subset, class_to_binary):
+class MultiClassSubset(Dataset):
+    """
+    Wrap a subset of a dataset to apply a mapping of targets (class labels) to
+    user-specified multi-class classification labels
+    """
+
+    def __init__(self, subset, class_to_index):
         self.subset = subset
-        self.class_to_binary = class_to_binary
+        self.class_to_index = class_to_index
 
     def __getitem__(self, index):
         data, target = self.subset[index]
-        if target not in self.class_to_binary:
-            raise ValueError(f"Target {target} not valid for binary subset")
-        binary_target = self.class_to_binary[target]
-        return data, binary_target
+        if target not in self.class_to_index:
+            raise ValueError(f"Target {target} not valid for multi-class subset")
+        multi_class_target = self.class_to_index[target]
+        return data, multi_class_target
 
     def __len__(self):
         return len(self.subset)
 
 
 @dataclass
-class BinaryClassifierExperiment(ImageExperiment):
+class ClassifierExperiment:
+    """
+    Base class for classifier experiments
+    """
+
+    dataset: DatasetFolder
+
+    # model parameters
+    model: nn.Module
+    criterion_class: nn.Module
+    optimizer_class: Type[optim.Optimizer] = optim.SGD
+    lr_scheduler_class: Optional[Type[lr_scheduler.LRScheduler]] = None
+
+    optimizer_kwargs: Dict[str, Any] = field(default_factory=dict)
+    scheduler_kwargs: Dict[str, Any] = field(default_factory=dict)
+
+    # training parameters
     num_epochs: int = 20
     lr: float = 1e-3
+    train_split: float = 0.8
+    batch_size: int = 64
     device: Union[torch.device, str] = "cpu"
-    split_ratio: float = 0.8
-    plot_history: bool = False
+    rseed: int = 99
 
     def __post_init__(self):
-        super().__post_init__()
         # Set up device
         self.device = torch.device(self.device)
         if not torch.cuda.is_available():
             self.device = torch.device("cpu")
             print("CUDA is not available. Using CPU instead.")
+        self.model.to(self.device)
+        self.optimizer = self.optimizer_class(
+            self.model.parameters(),
+            lr=self.lr,  # type: ignore
+            **self.optimizer_kwargs,
+        )
+        self.criterion = self.criterion_class()
+        if self.lr_scheduler_class is not None:
+            self.scheduler = self.lr_scheduler_class(
+                self.optimizer, **self.scheduler_kwargs
+            )
+        self.classes = self.dataset.classes  # type: ignore
+        self.class_to_idx: Dict[str, int] = self.dataset.class_to_idx  # type: ignore
+        self.idx_to_class: Dict[int, str] = {v: k for k, v in self.class_to_idx.items()}
+        self.img_shape = tuple(self.dataset[0][0].shape)
+        print("Image shape: ", self.img_shape)
 
-        self.input_dim = np.prod(self.img_shape)
-        # TODO: right now this is a linear classifier hard-coded
-        self.model = BinaryLinearClassifier(self.input_dim).to(self.device)
-        self.criterion = nn.BCELoss()
-        self.optimizer = optim.Adam(self.model.parameters(), lr=self.lr)
-        self.scheduler = lr_scheduler.StepLR(self.optimizer, step_size=10, gamma=0.1)
-        # self.scheduler = lr_scheduler.CosineAnnealingLR(
-        #     self.optimizer, T_max=10, eta_min=0
-        # )
+        self.rng = np.random.default_rng(self.rseed)
+
+    def train(self, dataloader: DataLoader) -> float:
+        """
+        Train the model for one epoch
+        """
+        self.model.train()
+        running_loss = 0.0
+        for inputs, labels in dataloader:
+            inputs, labels = (
+                inputs.to(self.device).float(),
+                labels.to(self.device).float(),
+            )
+            self.optimizer.zero_grad()
+            outputs = self.model(inputs).squeeze()
+            loss = self.criterion(outputs, labels)
+            loss.backward()
+            self.optimizer.step()
+            running_loss += loss.item() * inputs.size(0)
+        n_total = len(dataloader.dataset)  # type: ignore
+        avg_loss = running_loss / n_total
+        return avg_loss
+
+    def evaluate(self, dataloader: DataLoader) -> Tuple[float, float]:
+        """
+        Evaluate the model on the test set and return the average loss and accuracy
+        """
+        self.model.eval()
+        running_loss = 0.0
+        correct = 0
+        with torch.no_grad():
+            for inputs, labels in dataloader:
+                inputs, labels = (
+                    inputs.to(self.device).float(),
+                    labels.to(self.device).float(),
+                )
+                outputs = self.model(inputs).squeeze()
+                loss = self.criterion(outputs, labels)
+                running_loss += loss.item() * inputs.size(0)
+                preds = torch.round(outputs)  # binary predictions
+                correct += (preds == labels).sum().item()
+
+            n_total = len(dataloader.dataset)  # type: ignore
+        avg_loss = running_loss / n_total
+        accuracy = correct / n_total
+        return avg_loss, accuracy
 
     def _build_dataloader(
         self,
         class_list: List[str],
         num_samples: Optional[int] = None,
     ) -> Tuple[DataLoader, DataLoader]:
+        """
+        Build the dataloaders for the training and test sets.
+        Args:
+            class_list: List of class names to use for classification
+            num_samples: Number of samples to use for the training and test sets
+        Returns:
+            train_loader: DataLoader for the training set
+            test_loader: DataLoader for the test set
+        """
         # Convert target_class from string to integer index
         target_class_indices = [self.class_to_idx[cls] for cls in class_list]
 
         # For datasets like CIFAR10, use targets attribute
-        if hasattr(self.data, "targets"):
-            targets = self.data.targets  # type: ignore
+        if hasattr(self.dataset, "targets"):
+            targets = self.dataset.targets  # type: ignore
         # For ImageFolder, reconstruct targets from samples
-        elif hasattr(self.data, "samples"):
-            targets = [class_idx for _, class_idx in self.data.samples]  # type: ignore
+        elif hasattr(self.dataset, "samples"):
+            targets = [class_idx for _, class_idx in self.dataset.samples]  # type: ignore
         else:
             raise AttributeError(
                 "Dataset doesn't have 'targets' or 'samples' attribute"
@@ -107,22 +188,19 @@ class BinaryClassifierExperiment(ImageExperiment):
                 )
                 n_valid_inds = num_samples
 
-        train_size = int(n_valid_inds * self.split_ratio)
+        train_size = int(n_valid_inds * self.train_split)
         train_inds = valid_inds[:train_size]
         test_inds = valid_inds[train_size:]
 
-        train_subset = Subset(self.data, train_inds)
-        test_subset = Subset(self.data, test_inds)
+        train_subset = Subset(self.dataset, train_inds)
+        test_subset = Subset(self.dataset, test_inds)
 
-        # Map class indices to 0 or 1 for binary classification
-        class_to_binary = {
-            self.class_to_idx[class_list[0]]: 0,
-            self.class_to_idx[class_list[1]]: 1,
+        # Map class indices to user-specified multi-class classification labels
+        class_to_idx = {
+            self.class_to_idx[cls]: idx for idx, cls in enumerate(class_list)
         }
-
-        # Wrap subsets with BinarySubset to apply the mapping of targets (class labels) to 0 or 1
-        train_subset = BinarySubset(train_subset, class_to_binary)
-        test_subset = BinarySubset(test_subset, class_to_binary)
+        train_subset = MultiClassSubset(train_subset, class_to_idx)
+        test_subset = MultiClassSubset(test_subset, class_to_idx)
 
         target_counts = np.bincount([label for _, label in train_subset])
         print("Distribution of targets in train_subset:", target_counts)
@@ -138,80 +216,14 @@ class BinaryClassifierExperiment(ImageExperiment):
         return train_loader, test_loader
 
     def run(self, class_list: List[str], num_samples: Optional[int] = None) -> None:
-        if len(class_list) != 2:
-            raise ValueError(
-                "for binary classification, class_list must contain exactly 2 classes"
-            )
         train_loader, test_loader = self._build_dataloader(class_list, num_samples)
 
-        # Train and evaluate the model
-        train_loss_history = []
-        test_loss_history = []
-        accuracy_history = []
         for epoch in tqdm(range(self.num_epochs), desc="Training"):
             train_loss = self.train(train_loader)
             test_loss, accuracy = self.evaluate(test_loader)
-            self.scheduler.step()
-
-            train_loss_history.append(train_loss)
-            test_loss_history.append(test_loss)
-            accuracy_history.append(accuracy)
+            if self.scheduler is not None:
+                self.scheduler.step()
 
             print(
                 f"Epoch [{epoch+1}/{self.num_epochs}], Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}, Accuracy: {accuracy*100:.2f}%"
             )
-
-        if self.plot_history:
-            fig, ax1 = plt.subplots()
-
-            ax1.set_xlabel("Epoch")
-            ax1.set_ylabel("Loss", color="tab:blue")
-            ax1.plot(train_loss_history, label="Train Loss", color="tab:blue")
-            ax1.plot(test_loss_history, label="Test Loss", color="tab:orange")
-            ax1.tick_params(axis="y", labelcolor="tab:blue")
-            ax1.legend(loc="upper left")
-
-            ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
-            ax2.set_ylabel(
-                "Accuracy", color="tab:green"
-            )  # we already handled the x-label with ax1
-            ax2.plot(accuracy_history, label="Accuracy", color="tab:green")
-            ax2.tick_params(axis="y", labelcolor="tab:green")
-            ax2.legend(loc="upper right")
-
-            plt.title("Training and Test Loss with Accuracy")
-            plt.savefig("figs/loss_accuracy.png", dpi=300)
-            plt.close()
-
-    def train(self, dataloader: DataLoader) -> float:
-        self.model.train()
-        running_loss = 0.0
-        for inputs, labels in dataloader:
-            inputs, labels = inputs.to(self.device), labels.to(self.device).float()
-            self.optimizer.zero_grad()
-            outputs = self.model(inputs).squeeze()
-            loss = self.criterion(outputs, labels)
-            loss.backward()
-            self.optimizer.step()
-            running_loss += loss.item() * inputs.size(0)
-        n_total = len(dataloader.dataset)  # type: ignore
-        avg_loss = running_loss / n_total
-        return avg_loss
-
-    def evaluate(self, dataloader: DataLoader) -> Tuple[float, float]:
-        self.model.eval()
-        running_loss = 0.0
-        correct = 0
-        with torch.no_grad():
-            for inputs, labels in dataloader:
-                inputs, labels = inputs.to(self.device), labels.to(self.device).float()
-                outputs = self.model(inputs).squeeze()
-                loss = self.criterion(outputs, labels)
-                running_loss += loss.item() * inputs.size(0)
-                preds = torch.round(outputs)  # binary predictions
-                correct += (preds == labels).sum().item()
-
-            n_total = len(dataloader.dataset)  # type: ignore
-        avg_loss = running_loss / n_total
-        accuracy = correct / n_total
-        return avg_loss, accuracy

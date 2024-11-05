@@ -4,6 +4,7 @@ defaults:
   - gmm
   - dataset
   - experiment
+  - classifier
   # - override hydra/job_logging: disabled 
   - override hydra/hydra_logging: disabled 
 
@@ -12,4 +13,4 @@ hydra:
   run:
     dir: logs
 
-rseed: 0
+rseed: 99
