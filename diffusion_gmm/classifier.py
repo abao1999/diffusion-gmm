@@ -1,6 +1,5 @@
-import warnings
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple, Type, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Type, Union
 
 import numpy as np
 import torch
@@ -38,8 +37,8 @@ class MultiClassSubset(Dataset):
         data, target = self.subset[index]
         if target not in self.class_to_index:
             raise ValueError(f"Target {target} not valid for multi-class subset")
-        multi_class_target = self.class_to_index[target]
-        return data, multi_class_target
+        label = self.class_to_index[target]
+        return data, label
 
     def __len__(self):
         return len(self.subset)
@@ -54,8 +53,8 @@ class ClassifierExperiment:
     dataset: DatasetFolder
 
     # model parameters
-    model: nn.Module
-    criterion_class: nn.Module
+    model_class: Type[nn.Module]
+    criterion_class: Type[nn.Module]
     optimizer_class: Type[optim.Optimizer] = optim.SGD
     lr_scheduler_class: Optional[Type[lr_scheduler.LRScheduler]] = None
 
@@ -65,7 +64,6 @@ class ClassifierExperiment:
     # training parameters
     num_epochs: int = 20
     lr: float = 1e-3
-    train_split: float = 0.8
     batch_size: int = 64
     device: Union[torch.device, str] = "cpu"
     rseed: int = 99
@@ -76,17 +74,10 @@ class ClassifierExperiment:
         if not torch.cuda.is_available():
             self.device = torch.device("cpu")
             print("CUDA is not available. Using CPU instead.")
-        self.model.to(self.device)
-        self.optimizer = self.optimizer_class(
-            self.model.parameters(),
-            lr=self.lr,  # type: ignore
-            **self.optimizer_kwargs,
-        )
+        print("device: ", self.device)
+
         self.criterion = self.criterion_class()
-        if self.lr_scheduler_class is not None:
-            self.scheduler = self.lr_scheduler_class(
-                self.optimizer, **self.scheduler_kwargs
-            )
+
         self.classes = self.dataset.classes  # type: ignore
         self.class_to_idx: Dict[str, int] = self.dataset.class_to_idx  # type: ignore
         self.idx_to_class: Dict[int, str] = {v: k for k, v in self.class_to_idx.items()}
@@ -94,6 +85,33 @@ class ClassifierExperiment:
         print("Image shape: ", self.img_shape)
 
         self.rng = np.random.default_rng(self.rseed)
+        self.targets = self._get_targets()
+
+    def make_model_and_optimizer(self):
+        self.model = BinaryLinearClassifier(input_dim=np.prod(self.img_shape))
+        self.model.to(self.device)
+        self.optimizer = self.optimizer_class(
+            self.model.parameters(),
+            lr=self.lr,  # type: ignore
+            **self.optimizer_kwargs,
+        )
+        if self.lr_scheduler_class is not None:
+            self.scheduler = self.lr_scheduler_class(
+                self.optimizer, **self.scheduler_kwargs
+            )
+
+    def _get_targets(self) -> List[int]:
+        # For datasets like CIFAR10, use targets attribute
+        if hasattr(self.dataset, "targets"):
+            targets = self.dataset.targets  # type: ignore
+        # For ImageFolder, reconstruct targets from samples
+        elif hasattr(self.dataset, "samples"):
+            targets = [class_idx for _, class_idx in self.dataset.samples]  # type: ignore
+        else:
+            raise AttributeError(
+                "Dataset doesn't have 'targets' or 'samples' attribute"
+            )
+        return targets
 
     def train(self, dataloader: DataLoader) -> float:
         """
@@ -140,90 +158,186 @@ class ClassifierExperiment:
         accuracy = correct / n_total
         return avg_loss, accuracy
 
+    def get_split_indices(
+        self,
+        class_list: List[str],
+        max_allowed_samples_per_class: Optional[int] = None,
+        train_split: float = 0.8,
+    ) -> Tuple[List[int], List[int]]:
+        """
+        Get the indices for the training and test subsets
+        """
+        # Group indices by class
+        class_to_indices = {self.class_to_idx[cls]: [] for cls in class_list}
+        for i, class_idx in enumerate(self.targets):
+            # filter out only the indices for the targets that are in class_list
+            if class_idx in class_to_indices:
+                class_to_indices[class_idx].append(i)
+
+        for indices in class_to_indices.values():
+            self.rng.shuffle(indices)
+
+        # Determine the minimum number of samples in the class with the fewest samples
+        n_samples_per_class = min(len(indices) for indices in class_to_indices.values())
+        print("number of samples in smallest class: ", n_samples_per_class)
+
+        # If max_allowed_samples_per_class is specified, limit the samples per class
+        if max_allowed_samples_per_class is not None:
+            n_samples_per_class = min(
+                n_samples_per_class,
+                max_allowed_samples_per_class,
+            )
+        print("number of samples per class to use: ", n_samples_per_class)
+
+        # Sample equal number of indices from each class
+        train_size_per_class = int(n_samples_per_class * train_split)
+        balanced_train_inds = []
+        balanced_test_inds = []
+        for indices in class_to_indices.values():
+            print(f"length of indices: {len(indices)}")
+            balanced_train_inds.extend(indices[:train_size_per_class])
+            balanced_test_inds.extend(indices[train_size_per_class:n_samples_per_class])
+            print(f"length of balanced_train_inds: {len(balanced_train_inds)}")
+            print(f"length of balanced_test_inds: {len(balanced_test_inds)}")
+        return balanced_train_inds, balanced_test_inds
+
     def _build_dataloader(
         self,
         class_list: List[str],
-        num_samples: Optional[int] = None,
-    ) -> Tuple[DataLoader, DataLoader]:
+        dataset_indices: List[int],
+        prop_samples_to_use: float = 1.0,
+        rng: Optional[np.random.Generator] = None,
+        shuffle: bool = True,
+    ) -> DataLoader:
         """
         Build the dataloaders for the training and test sets.
         Args:
             class_list: List of class names to use for classification
-            num_samples: Number of samples to use for the training and test sets
+            dataset_indices: Indices to use from the dataset
+            prop_samples_to_use: Proportion of samples in dataset to use for training
+            rng: Random number generator to use for shuffling. Defaults to self.rng
+            shuffle: Whether to shuffle the dataset indices
         Returns:
-            train_loader: DataLoader for the training set
-            test_loader: DataLoader for the test set
+            dataloader: DataLoader for the training set
         """
-        # Convert target_class from string to integer index
-        target_class_indices = [self.class_to_idx[cls] for cls in class_list]
-
-        # For datasets like CIFAR10, use targets attribute
-        if hasattr(self.dataset, "targets"):
-            targets = self.dataset.targets  # type: ignore
-        # For ImageFolder, reconstruct targets from samples
-        elif hasattr(self.dataset, "samples"):
-            targets = [class_idx for _, class_idx in self.dataset.samples]  # type: ignore
-        else:
-            raise AttributeError(
-                "Dataset doesn't have 'targets' or 'samples' attribute"
-            )
-
-        valid_inds = [
-            i
-            for i, class_idx in enumerate(targets)
-            if class_idx in target_class_indices
-        ]
-
-        self.rng.shuffle(valid_inds)
-        n_valid_inds = len(valid_inds)
-
-        if num_samples is not None:
-            if num_samples > n_valid_inds:
-                warnings.warn(
-                    f"num_samples {num_samples} is greater than the number of valid samples {n_valid_inds}. Using all valid samples."
-                )
+        # Group indices by class
+        class_to_indices = {self.class_to_idx[cls]: [] for cls in class_list}
+        for idx in dataset_indices:
+            class_idx = self.targets[idx]
+            if class_idx in class_to_indices:
+                class_to_indices[class_idx].append(idx)
             else:
-                valid_inds = list(
-                    self.rng.choice(valid_inds, num_samples, replace=False)
+                raise ValueError(
+                    f"Class {class_idx} should not be present in dataset_indices."
                 )
-                n_valid_inds = num_samples
 
-        train_size = int(n_valid_inds * self.train_split)
-        train_inds = valid_inds[:train_size]
-        test_inds = valid_inds[train_size:]
+        # Shuffle and select a proportion of indices for each class
+        selected_indices = []
+        rng = rng if rng is not None else self.rng
+        for class_idx, indices in class_to_indices.items():
+            if shuffle:
+                rng.shuffle(indices)
+            subset_size = int(len(indices) * prop_samples_to_use)
+            selected_indices.extend(indices[:subset_size])
 
-        train_subset = Subset(self.dataset, train_inds)
-        test_subset = Subset(self.dataset, test_inds)
+        print(f"Building dataloader with {len(selected_indices)} samples...")
 
+        subset_inds = Subset(self.dataset, selected_indices)
         # Map class indices to user-specified multi-class classification labels
-        class_to_idx = {
+        class_to_label = {
             self.class_to_idx[cls]: idx for idx, cls in enumerate(class_list)
         }
-        train_subset = MultiClassSubset(train_subset, class_to_idx)
-        test_subset = MultiClassSubset(test_subset, class_to_idx)
+        print("class_to_label mapping: ", class_to_label)
+        train_subset = MultiClassSubset(subset_inds, class_to_label)
 
         target_counts = np.bincount([label for _, label in train_subset])
-        print("Distribution of targets in train_subset:", target_counts)
+        print("Distribution of targets in subset:", target_counts)
 
-        target_counts = np.bincount([label for _, label in test_subset])
-        print("Distribution of targets in test_subset:", target_counts)
+        dataloader = DataLoader(train_subset, batch_size=self.batch_size, shuffle=True)
 
-        train_loader = DataLoader(
-            train_subset, batch_size=self.batch_size, shuffle=True
+        return dataloader
+
+    def run(
+        self,
+        class_list: List[str],
+        train_subset_inds: List[int],
+        test_subset_inds: List[int],
+        prop_train_schedule: Sequence[float],
+        n_runs: int = 1,
+        verbose: bool = False,
+    ) -> Dict[str, List[List[Tuple[float, float]]]]:
+        """
+        Run the classifier experiment
+        Args:
+            prop_train_schedule: Schedule for proportion of samples in training split to use for training
+            train_indices: Indices to use for training
+            test_subset_inds: Indices to use for testing
+        """
+        print(f"Running classifier experiment with {class_list} classes...")
+        print(f"prop_train_schedule: {prop_train_schedule}")
+        n_props_train = len(prop_train_schedule)
+
+        print(f"{len(train_subset_inds)} train_subset_inds")
+        print(f"{len(test_subset_inds)} test_subset_inds")
+
+        print(f"Building test dataloader with {len(test_subset_inds)} samples...")
+        test_loader = self._build_dataloader(
+            class_list, test_subset_inds, prop_samples_to_use=1.0
         )
-        test_loader = DataLoader(test_subset, batch_size=self.batch_size, shuffle=True)
 
-        return train_loader, test_loader
+        rng_stream = self.rng.spawn(n_runs)
 
-    def run(self, class_list: List[str], num_samples: Optional[int] = None) -> None:
-        train_loader, test_loader = self._build_dataloader(class_list, num_samples)
+        final_train_losses_all_runs = []
+        final_test_losses_all_runs = []
+        final_accuracies_all_runs = []
+        for run_idx in range(n_runs):
+            # fix random seed for each run
+            rng = rng_stream[run_idx]
 
-        for epoch in tqdm(range(self.num_epochs), desc="Training"):
-            train_loss = self.train(train_loader)
-            test_loss, accuracy = self.evaluate(test_loader)
-            if self.scheduler is not None:
-                self.scheduler.step()
+            # rseed = self.rseed + run_idx
+            # torch.manual_seed(rseed)
+            # np.random.seed(rseed)
+            # # If using CUDA, you should also set the seed for CUDA for full reproducibility
+            # if torch.cuda.is_available():
+            #     torch.cuda.manual_seed(rseed)
+            #     torch.cuda.manual_seed_all(rseed)  # if you have multiple GPUs
 
-            print(
-                f"Epoch [{epoch+1}/{self.num_epochs}], Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}, Accuracy: {accuracy*100:.2f}%"
-            )
+            # reset the model to the initial state
+            self.make_model_and_optimizer()
+            # train on different proportions of the training set, defined by prop_train_schedule
+            final_train_losses = []
+            final_test_losses = []
+            final_accuracies = []
+            for prop_idx in range(n_props_train):
+                prop_train = prop_train_schedule[prop_idx]
+                print(
+                    f"Building train dataloader using {prop_train} * {len(train_subset_inds)} samples from the training split..."
+                )
+                train_loader = self._build_dataloader(
+                    class_list,
+                    train_subset_inds,
+                    prop_samples_to_use=prop_train,
+                    rng=rng,
+                )
+                for epoch in tqdm(range(self.num_epochs), desc="Training"):
+                    train_loss = self.train(train_loader)
+                    test_loss, accuracy = self.evaluate(test_loader)
+                    if self.scheduler is not None:
+                        self.scheduler.step()
+                    if verbose and (epoch + 1) % 5 == 0:
+                        print(
+                            f"Epoch [{epoch+1}/{self.num_epochs}], Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}, Accuracy: {accuracy*100:.2f}%"
+                        )
+                final_train_losses.append((prop_train, train_loss))
+                final_test_losses.append((prop_train, test_loss))
+                final_accuracies.append((prop_train, accuracy))
+            final_train_losses_all_runs.append(final_train_losses)
+            final_test_losses_all_runs.append(final_test_losses)
+            final_accuracies_all_runs.append(final_accuracies)
+
+        results_dict = {
+            "train_losses": final_train_losses_all_runs,
+            "test_losses": final_test_losses_all_runs,
+            "accuracies": final_accuracies_all_runs,
+        }
+        return results_dict
