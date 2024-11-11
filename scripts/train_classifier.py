@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from typing import List, Tuple
 
@@ -22,6 +23,8 @@ def plot_training_history(
     accuracy_history_all_runs: List[List[Tuple[float, float]]],
     save_dir: str = "figs",
     save_name: str = "loss_accuracy.png",
+    title: str = "Binary Linear Classifier",
+    plot_individual_runs: bool = False,
 ) -> None:
     fig, ax1 = plt.subplots()
 
@@ -32,26 +35,108 @@ def plot_training_history(
     accuracies = [[item[1] for item in x] for x in accuracy_history_all_runs]
     # prop_train = np.linspace(0.1, 1.0, len(train_losses[0]))
     prop_train_schedule = [[item[0] for item in x] for x in train_loss_history_all_runs]
+    n_runs = len(prop_train_schedule)
+    assert (
+        n_runs == len(train_losses) == len(test_losses) == len(accuracies)
+    ), "Number of runs must match number of train, test, and accuracy lists"
+    print("n_runs: ", n_runs)
+
+    mean_train_losses = np.mean(train_losses, axis=0)
+    mean_test_losses = np.mean(test_losses, axis=0)
+    mean_accuracies = np.mean(accuracies, axis=0)
+
+    # Calculate standard deviation for train losses
+    std_train_losses = np.std(train_losses, axis=0)
+    std_test_losses = np.std(test_losses, axis=0)
+    std_accuracies = np.std(accuracies, axis=0)
 
     ax1.set_xlabel("Proportion of Training Data")
     ax1.set_ylabel("Loss", color="tab:blue")
 
-    ax1.plot(prop_train_schedule, train_losses, label="Train Loss", color="tab:blue")
-    ax1.plot(prop_train_schedule, test_losses, label="Test Loss", color="tab:orange")
+    if plot_individual_runs:
+        for i in range(n_runs):
+            ax1.plot(
+                prop_train_schedule[i],
+                train_losses[i],
+                color="tab:blue",
+                alpha=0.2,
+            )
+            ax1.plot(
+                prop_train_schedule[i],
+                test_losses[i],
+                color="tab:orange",
+                alpha=0.2,
+            )
+    # Plot average train loss
+    ax1.plot(
+        prop_train_schedule[0],  # Use the first schedule as they should all be the same
+        mean_train_losses,
+        label="Avg Train Loss",
+        color="tab:blue",
+        marker=".",
+    )
+    # Plot standard deviation envelope for train losses
+    ax1.fill_between(
+        prop_train_schedule[0],
+        mean_train_losses - std_train_losses,
+        mean_train_losses + std_train_losses,
+        color="tab:blue",
+        alpha=0.1,
+    )
+    # plot average test loss
+    ax1.plot(
+        prop_train_schedule[0],
+        mean_test_losses,
+        label="Avg Test Loss",
+        color="tab:orange",
+        marker=".",
+    )
+    # plot standard deviation envelope for test losses
+    ax1.fill_between(
+        prop_train_schedule[0],
+        mean_test_losses - std_test_losses,
+        mean_test_losses + std_test_losses,
+        color="tab:orange",
+        alpha=0.1,
+    )
 
     ax1.tick_params(axis="y", labelcolor="tab:blue")
     ax1.legend(loc="upper left")
 
-    ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
-    ax2.set_ylabel(
-        "Accuracy", color="tab:green"
-    )  # we already handled the x-label with ax1
-    ax2.plot(prop_train_schedule, accuracies, label="Accuracy", color="tab:green")
+    # instantiate a second axes that shares the same x-axis
+    ax2 = ax1.twinx()
+    ax2.set_ylabel("Accuracy", color="tab:green")
+    if plot_individual_runs:
+        for i in range(n_runs):
+            ax2.plot(
+                prop_train_schedule[i],
+                accuracies[i],
+                color="tab:green",
+                alpha=0.2,
+            )
+    # plot average accuracy
+    ax2.plot(
+        prop_train_schedule[0],
+        mean_accuracies,
+        label="Avg Accuracy",
+        color="tab:green",
+        marker=".",
+    )
+    # plot standard deviation envelope for accuracies
+    ax2.fill_between(
+        prop_train_schedule[0],
+        mean_accuracies - std_accuracies,
+        mean_accuracies + std_accuracies,
+        color="tab:green",
+        alpha=0.1,
+    )
     ax2.tick_params(axis="y", labelcolor="tab:green")
     ax2.legend(loc="upper right")
 
-    plt.title("Training and Test Loss with Accuracy")
+    plt.title(title)
     plt.savefig(os.path.join(save_dir, save_name), dpi=300)
+    plt.gca().set_aspect("equal")
+    plt.tight_layout()
     plt.close()
 
 
@@ -62,6 +147,31 @@ def npy_loader(path):
 
 @hydra.main(config_path="../config", config_name="config", version_base=None)
 def main(cfg):
+    # run_names = [
+    #     "gmm_imagenet64_english-springer_french-horn",
+    #     "edm_imagenet64_english-springer_french-horn",
+    # ]
+    # for run_name in run_names:
+    #     json_path = f"results/classifier/{run_name}_results.json"
+    #     with open(json_path, "r") as f:
+    #         results_dict = json.load(f)
+    #     plot_training_history(
+    #         train_loss_history_all_runs=results_dict["train_losses"],
+    #         test_loss_history_all_runs=results_dict["test_losses"],
+    #         accuracy_history_all_runs=results_dict["accuracies"],
+    #         save_name=f"_loss_accuracy_{run_name}.png",
+    #         title="Binary Linear Classifier",
+    #     )
+
+    # exit()
+
+    logger.info(cfg.classifier)
+
+    print(torch.cuda.is_available())
+    print(torch.cuda.device_count())
+    print(torch.cuda.current_device())
+    print(torch.cuda.get_device_name(0))
+
     torch.manual_seed(cfg.rseed)
     # If using CUDA, you should also set the seed for CUDA for full reproducibility
     if torch.cuda.is_available():
@@ -101,15 +211,15 @@ def main(cfg):
         getattr(cfg.classifier.optimizer, f"{cfg.classifier.optimizer.method}_kwargs")
     )
 
-    scheduler_cls = getattr(lr_scheduler, cfg.classifier.scheduler.method)
-    if scheduler_cls is not None:
+    scheduler_cls = None
+    scheduler_kwargs = {}
+    if cfg.classifier.scheduler.method is not None:
+        scheduler_cls = getattr(lr_scheduler, cfg.classifier.scheduler.method)
         scheduler_kwargs = dict(
             getattr(
                 cfg.classifier.scheduler, f"{cfg.classifier.scheduler.method}_kwargs"
             )
         )
-    else:
-        scheduler_kwargs = {}
     loss_fn = getattr(nn, cfg.classifier.criterion)
 
     experiment = ClassifierExperiment(
@@ -125,6 +235,7 @@ def main(cfg):
         batch_size=cfg.classifier.batch_size,
         device=cfg.classifier.device,
         rseed=cfg.rseed,
+        verbose=cfg.classifier.verbose,
     )
 
     train_inds, test_inds = experiment.get_split_indices(
@@ -133,7 +244,7 @@ def main(cfg):
         cfg.classifier.train_split,
     )
 
-    prop_train_schedule = np.linspace(1.0, 0.1, cfg.classifier.n_runs)
+    prop_train_schedule = np.linspace(1.0, 0.1, cfg.classifier.n_props_train)
 
     results_dict = experiment.run(
         cfg.classifier.class_list,
@@ -141,13 +252,19 @@ def main(cfg):
         test_subset_inds=test_inds,
         prop_train_schedule=prop_train_schedule,  # type: ignore
         n_runs=cfg.classifier.n_runs,
+        reset_model_random_seed=cfg.classifier.reset_model_random_seed,
         verbose=cfg.classifier.verbose,
     )
 
     print(results_dict)
-    save_dir = os.path.join(cfg.experiment.data_dir, "classifier_results")
+    save_dir = cfg.classifier.save_dir
     os.makedirs(save_dir, exist_ok=True)
-    results_file_path = os.path.join(save_dir, "results.json")
+    save_name = (
+        f"{cfg.classifier.save_name}_results.json"
+        if cfg.classifier.save_name is not None
+        else "results.json"
+    )
+    results_file_path = os.path.join(save_dir, save_name)
 
     with open(results_file_path, "w") as results_file:
         json.dump(results_dict, results_file, indent=4)
@@ -157,8 +274,13 @@ def main(cfg):
         results_dict["train_losses"],
         results_dict["test_losses"],
         results_dict["accuracies"],
+        save_name=f"loss_accuracy_{cfg.classifier.save_name}.png",
+        title="Binary Linear Classifier",
     )
 
 
 if __name__ == "__main__":
+    logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s")
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.INFO)
     main()

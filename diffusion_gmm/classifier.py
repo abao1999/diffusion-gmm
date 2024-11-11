@@ -1,3 +1,5 @@
+import json
+import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Type, Union
 
@@ -9,6 +11,8 @@ from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader, Dataset, Subset
 from torchvision.datasets import DatasetFolder
 from tqdm.auto import tqdm
+
+logger = logging.getLogger(__name__)
 
 
 # Define a simple linear classifier
@@ -67,14 +71,17 @@ class ClassifierExperiment:
     batch_size: int = 64
     device: Union[torch.device, str] = "cpu"
     rseed: int = 99
+    verbose: bool = False
 
     def __post_init__(self):
         # Set up device
-        self.device = torch.device(self.device)
-        if not torch.cuda.is_available():
+        if torch.cuda.is_available():
+            self.device = torch.device(self.device)
+        else:
             self.device = torch.device("cpu")
             print("CUDA is not available. Using CPU instead.")
         print("device: ", self.device)
+        print("current device: ", torch.cuda.current_device())
 
         self.criterion = self.criterion_class()
 
@@ -88,8 +95,10 @@ class ClassifierExperiment:
         self.targets = self._get_targets()
 
     def make_model_and_optimizer(self):
-        self.model = BinaryLinearClassifier(input_dim=np.prod(self.img_shape))
-        self.model.to(self.device)
+        self.model = BinaryLinearClassifier(input_dim=np.prod(self.img_shape)).to(
+            self.device
+        )
+        # self.model.to(self.device)
         self.optimizer = self.optimizer_class(
             self.model.parameters(),
             lr=self.lr,  # type: ignore
@@ -99,6 +108,8 @@ class ClassifierExperiment:
             self.scheduler = self.lr_scheduler_class(
                 self.optimizer, **self.scheduler_kwargs
             )
+        else:
+            self.scheduler = None
 
     def _get_targets(self) -> List[int]:
         # For datasets like CIFAR10, use targets attribute
@@ -134,6 +145,7 @@ class ClassifierExperiment:
         avg_loss = running_loss / n_total
         return avg_loss
 
+    @torch.no_grad()
     def evaluate(self, dataloader: DataLoader) -> Tuple[float, float]:
         """
         Evaluate the model on the test set and return the average loss and accuracy
@@ -179,7 +191,6 @@ class ClassifierExperiment:
 
         # Determine the minimum number of samples in the class with the fewest samples
         n_samples_per_class = min(len(indices) for indices in class_to_indices.values())
-        print("number of samples in smallest class: ", n_samples_per_class)
 
         # If max_allowed_samples_per_class is specified, limit the samples per class
         if max_allowed_samples_per_class is not None:
@@ -187,18 +198,18 @@ class ClassifierExperiment:
                 n_samples_per_class,
                 max_allowed_samples_per_class,
             )
-        print("number of samples per class to use: ", n_samples_per_class)
+
+        if self.verbose:
+            logger.info("number of samples in smallest class: %d", n_samples_per_class)
+            logger.info("number of samples per class to use: %d", n_samples_per_class)
 
         # Sample equal number of indices from each class
         train_size_per_class = int(n_samples_per_class * train_split)
         balanced_train_inds = []
         balanced_test_inds = []
         for indices in class_to_indices.values():
-            print(f"length of indices: {len(indices)}")
             balanced_train_inds.extend(indices[:train_size_per_class])
             balanced_test_inds.extend(indices[train_size_per_class:n_samples_per_class])
-            print(f"length of balanced_train_inds: {len(balanced_train_inds)}")
-            print(f"length of balanced_test_inds: {len(balanced_test_inds)}")
         return balanced_train_inds, balanced_test_inds
 
     def _build_dataloader(
@@ -240,18 +251,19 @@ class ClassifierExperiment:
             subset_size = int(len(indices) * prop_samples_to_use)
             selected_indices.extend(indices[:subset_size])
 
-        print(f"Building dataloader with {len(selected_indices)} samples...")
-
         subset_inds = Subset(self.dataset, selected_indices)
         # Map class indices to user-specified multi-class classification labels
         class_to_label = {
             self.class_to_idx[cls]: idx for idx, cls in enumerate(class_list)
         }
-        print("class_to_label mapping: ", class_to_label)
+        # logger.info("class_to_label mapping: %s", class_to_label)
         train_subset = MultiClassSubset(subset_inds, class_to_label)
 
         target_counts = np.bincount([label for _, label in train_subset])
-        print("Distribution of targets in subset:", target_counts)
+
+        if self.verbose:
+            logger.info("Built dataloader with %d samples...", len(selected_indices))
+            logger.info("Distribution of targets in subset: %s", target_counts)
 
         dataloader = DataLoader(train_subset, batch_size=self.batch_size, shuffle=True)
 
@@ -264,6 +276,7 @@ class ClassifierExperiment:
         test_subset_inds: List[int],
         prop_train_schedule: Sequence[float],
         n_runs: int = 1,
+        reset_model_random_seed: bool = False,
         verbose: bool = False,
     ) -> Dict[str, List[List[Tuple[float, float]]]]:
         """
@@ -273,14 +286,14 @@ class ClassifierExperiment:
             train_indices: Indices to use for training
             test_subset_inds: Indices to use for testing
         """
-        print(f"Running classifier experiment with {class_list} classes...")
-        print(f"prop_train_schedule: {prop_train_schedule}")
+        if verbose:
+            logger.info("Running classifier experiment with %s classes...", class_list)
+            logger.info("prop_train_schedule: %s", prop_train_schedule)
+            logger.info(
+                "Building test dataloader with %d samples...", len(test_subset_inds)
+            )
+
         n_props_train = len(prop_train_schedule)
-
-        print(f"{len(train_subset_inds)} train_subset_inds")
-        print(f"{len(test_subset_inds)} test_subset_inds")
-
-        print(f"Building test dataloader with {len(test_subset_inds)} samples...")
         test_loader = self._build_dataloader(
             class_list, test_subset_inds, prop_samples_to_use=1.0
         )
@@ -290,29 +303,41 @@ class ClassifierExperiment:
         final_train_losses_all_runs = []
         final_test_losses_all_runs = []
         final_accuracies_all_runs = []
-        for run_idx in range(n_runs):
+        for run_idx in tqdm(range(n_runs), desc="Running classifier experiment"):
             # fix random seed for each run
             rng = rng_stream[run_idx]
 
-            # rseed = self.rseed + run_idx
-            # torch.manual_seed(rseed)
-            # np.random.seed(rseed)
-            # # If using CUDA, you should also set the seed for CUDA for full reproducibility
-            # if torch.cuda.is_available():
-            #     torch.cuda.manual_seed(rseed)
-            #     torch.cuda.manual_seed_all(rseed)  # if you have multiple GPUs
+            if reset_model_random_seed:
+                # set torch random seed for this run
+                rseed = self.rseed + run_idx
+                print(f"Setting torch random seed to {rseed} for run {run_idx}")
+                torch.manual_seed(rseed)
+                # If using CUDA, you should also set the seed for CUDA for full reproducibility
+                if torch.cuda.is_available():
+                    torch.cuda.manual_seed(rseed)
+                    torch.cuda.manual_seed_all(rseed)  # if you have multiple GPUs
 
-            # reset the model to the initial state
-            self.make_model_and_optimizer()
             # train on different proportions of the training set, defined by prop_train_schedule
             final_train_losses = []
             final_test_losses = []
             final_accuracies = []
-            for prop_idx in range(n_props_train):
+            for prop_idx in tqdm(
+                range(n_props_train),
+                desc="Training on different proportions of the training set",
+            ):
+                # reset the model and optimizer and scheduler to the initial state
+                self.make_model_and_optimizer()
+
                 prop_train = prop_train_schedule[prop_idx]
-                print(
-                    f"Building train dataloader using {prop_train} * {len(train_subset_inds)} samples from the training split..."
-                )
+
+                if verbose:
+                    logger.info(
+                        f"run {run_idx}, prop_train {prop_train_schedule[prop_idx]}"
+                    )
+                    logger.info(
+                        f"Building train dataloader using {prop_train} * {len(train_subset_inds)} samples from the training split...",
+                    )
+
                 train_loader = self._build_dataloader(
                     class_list,
                     train_subset_inds,
@@ -324,9 +349,14 @@ class ClassifierExperiment:
                     test_loss, accuracy = self.evaluate(test_loader)
                     if self.scheduler is not None:
                         self.scheduler.step()
-                    if verbose and (epoch + 1) % 5 == 0:
-                        print(
-                            f"Epoch [{epoch+1}/{self.num_epochs}], Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}, Accuracy: {accuracy*100:.2f}%"
+                    if (epoch + 1) % 10 == 0:
+                        logger.info(
+                            "Epoch [%d/%d], Train Loss: %f, Test Loss: %f, Accuracy: %f%%",
+                            epoch + 1,
+                            self.num_epochs,
+                            train_loss,
+                            test_loss,
+                            accuracy * 100,
                         )
                 final_train_losses.append((prop_train, train_loss))
                 final_test_losses.append((prop_train, test_loss))
@@ -340,4 +370,6 @@ class ClassifierExperiment:
             "test_losses": final_test_losses_all_runs,
             "accuracies": final_accuracies_all_runs,
         }
+        if verbose:
+            logger.info("Results:\n%s", json.dumps(results_dict, indent=4))
         return results_dict
