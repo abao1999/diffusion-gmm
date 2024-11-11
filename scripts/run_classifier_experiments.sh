@@ -2,11 +2,11 @@
 main_dir=$(dirname "$(dirname "$0")")
 data_dir=$WORK/vision_datasets
 
-n_runs=20
+n_runs=10
 n_props_train=4
 reset_model_random_seed=true
 save_dir=results/classifier
-num_epochs=200
+num_epochs=1000
 max_allowed_samples_per_class=1024
 train_split=0.8
 batch_size=64
@@ -18,13 +18,14 @@ rseed=10
 verbose=false
 
 
-dataset_list=("imagenette64" "gmm_imagenet64" "edm_imagenet64")
+dataset_list=("gmm_imagenet64" "edm_imagenet64" "imagenette64")
 for i in "${!dataset_list[@]}"; do
     dataset=${dataset_list[i]}
-    device_idx=$((6 - i))
+    # device_idx=$((6 - i))
+    device_idx=6
     echo $dataset
     echo $device_idx
-    CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6 python scripts/train_classifier.py \
+    python scripts/train_classifier.py \
         experiment.data_dir=$data_dir/$dataset \
         classifier.max_allowed_samples_per_class=$max_allowed_samples_per_class \
         classifier.criterion=$criterion \
@@ -41,6 +42,7 @@ for i in "${!dataset_list[@]}"; do
         classifier.device=cuda:${device_idx} \
         classifier.optimizer.method=$optimizer_class \
         classifier.scheduler.method=$scheduler_class \
+        classifier.scheduler.CosineAnnealingLR_kwargs.T_max=$num_epochs \
         rseed=$rseed \
         classifier.verbose=$verbose \
         # "$@" &

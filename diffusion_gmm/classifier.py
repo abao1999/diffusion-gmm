@@ -31,6 +31,7 @@ class MultiClassSubset(Dataset):
     """
     Wrap a subset of a dataset to apply a mapping of targets (class labels) to
     user-specified multi-class classification labels
+    NOTE: cannot use this with hinge-like loss functions
     """
 
     def __init__(self, subset, class_to_index):
@@ -219,6 +220,7 @@ class ClassifierExperiment:
         prop_samples_to_use: float = 1.0,
         rng: Optional[np.random.Generator] = None,
         shuffle: bool = True,
+        num_workers: int = 10,
     ) -> DataLoader:
         """
         Build the dataloaders for the training and test sets.
@@ -265,7 +267,12 @@ class ClassifierExperiment:
             logger.info("Built dataloader with %d samples...", len(selected_indices))
             logger.info("Distribution of targets in subset: %s", target_counts)
 
-        dataloader = DataLoader(train_subset, batch_size=self.batch_size, shuffle=True)
+        dataloader = DataLoader(
+            train_subset,
+            batch_size=self.batch_size,
+            shuffle=True,
+            num_workers=num_workers,
+        )
 
         return dataloader
 
@@ -278,7 +285,7 @@ class ClassifierExperiment:
         n_runs: int = 1,
         reset_model_random_seed: bool = False,
         verbose: bool = False,
-    ) -> Dict[str, List[List[Tuple[float, float]]]]:
+    ) -> Dict[str, List[List[Tuple[float, float, int]]]]:
         """
         Run the classifier experiment
         Args:
@@ -318,9 +325,9 @@ class ClassifierExperiment:
                     torch.cuda.manual_seed_all(rseed)  # if you have multiple GPUs
 
             # train on different proportions of the training set, defined by prop_train_schedule
-            final_train_losses = []
-            final_test_losses = []
-            final_accuracies = []
+            final_train_losses = [(-1.0, -1.0, -1)] * n_props_train
+            final_test_losses = [(-1.0, -1.0, -1)] * n_props_train
+            final_accuracies = [(-1.0, -1.0, -1)] * n_props_train
             for prop_idx in tqdm(
                 range(n_props_train),
                 desc="Training on different proportions of the training set",
@@ -344,12 +351,18 @@ class ClassifierExperiment:
                     prop_samples_to_use=prop_train,
                     rng=rng,
                 )
+                best_test_loss = float("inf")
                 for epoch in tqdm(range(self.num_epochs), desc="Training"):
                     train_loss = self.train(train_loader)
                     test_loss, accuracy = self.evaluate(test_loader)
+                    if test_loss < best_test_loss:
+                        best_test_loss = test_loss
+                        final_train_losses[prop_idx] = (prop_train, train_loss, epoch)
+                        final_test_losses[prop_idx] = (prop_train, test_loss, epoch)
+                        final_accuracies[prop_idx] = (prop_train, accuracy, epoch)
                     if self.scheduler is not None:
                         self.scheduler.step()
-                    if (epoch + 1) % 10 == 0:
+                    if verbose and (epoch + 1) % 10 == 0:
                         logger.info(
                             "Epoch [%d/%d], Train Loss: %f, Test Loss: %f, Accuracy: %f%%",
                             epoch + 1,
@@ -358,9 +371,20 @@ class ClassifierExperiment:
                             test_loss,
                             accuracy * 100,
                         )
-                final_train_losses.append((prop_train, train_loss))
-                final_test_losses.append((prop_train, test_loss))
-                final_accuracies.append((prop_train, accuracy))
+                        logger.info(
+                            "Learning rate: %f", self.optimizer.param_groups[0]["lr"]
+                        )
+
+                logger.info(f"run {run_idx} prop {prop_train} finished")
+                logger.info(
+                    f"train loss for prop {prop_train}: {final_train_losses[prop_idx]}"
+                )
+                logger.info(
+                    f"test loss for prop {prop_train}: {final_test_losses[prop_idx]}"
+                )
+                logger.info(
+                    f"accuracy for prop {prop_train}: {final_accuracies[prop_idx]}"
+                )
             final_train_losses_all_runs.append(final_train_losses)
             final_test_losses_all_runs.append(final_test_losses)
             final_accuracies_all_runs.append(final_accuracies)

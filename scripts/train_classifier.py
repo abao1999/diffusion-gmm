@@ -18,9 +18,9 @@ from diffusion_gmm.classifier import BinaryLinearClassifier, ClassifierExperimen
 
 
 def plot_training_history(
-    train_loss_history_all_runs: List[List[Tuple[float, float]]],
-    test_loss_history_all_runs: List[List[Tuple[float, float]]],
-    accuracy_history_all_runs: List[List[Tuple[float, float]]],
+    train_loss_history_all_runs: List[List[Tuple[float, float, int]]],
+    test_loss_history_all_runs: List[List[Tuple[float, float, int]]],
+    accuracy_history_all_runs: List[List[Tuple[float, float, int]]],
     save_dir: str = "figs",
     save_name: str = "loss_accuracy.png",
     title: str = "Binary Linear Classifier",
@@ -280,7 +280,7 @@ def main(cfg):
 
 
 if __name__ == "__main__":
-    logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s")
+    logging.basicConfig(format="%(asctime)s - %(message)s")
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.INFO)
     main()

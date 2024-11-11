@@ -41,3 +41,7 @@ classifier:
     StepLR_kwargs:
       step_size: 10
       gamma: 0.1
+
+    CosineAnnealingLR_kwargs:
+      T_max: 200
+      eta_min: 1e-4
