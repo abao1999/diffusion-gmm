@@ -6,22 +6,26 @@ n_runs=10
 n_props_train=4
 reset_model_random_seed=true
 save_dir=results/classifier
-num_epochs=1000
+num_epochs=200
 max_allowed_samples_per_class=1024
 train_split=0.8
 batch_size=64
-lr=3e-4
+lr=1e-3  # 3e-4
 criterion=MSELoss
 optimizer_class=SGD
-scheduler_class=null
+scheduler_class=CosineAnnealingLR
 rseed=10
 verbose=false
 
-
-dataset_list=("gmm_imagenet64" "edm_imagenet64" "imagenette64")
+dataset_list=("edm_imagenet64" "gmm_imagenet64", "imagenette64")
 for i in "${!dataset_list[@]}"; do
     dataset=${dataset_list[i]}
     # device_idx=$((6 - i))
+    use_augmentations=false
+    # if [ $i -eq 1 ]; then
+    #     use_augmentations=false
+    # fi
+    # echo $use_augmentations
     device_idx=6
     echo $dataset
     echo $device_idx
@@ -36,6 +40,7 @@ for i in "${!dataset_list[@]}"; do
         classifier.batch_size=$batch_size \
         classifier.n_runs=$n_runs \
         classifier.n_props_train=$n_props_train \
+        classifier.use_augmentations=$use_augmentations \
         classifier.reset_model_random_seed=$reset_model_random_seed \
         classifier.save_dir=$save_dir \
         classifier.save_name=${dataset}_english-springer_french-horn \
@@ -43,6 +48,7 @@ for i in "${!dataset_list[@]}"; do
         classifier.optimizer.method=$optimizer_class \
         classifier.scheduler.method=$scheduler_class \
         classifier.scheduler.CosineAnnealingLR_kwargs.T_max=$num_epochs \
+        classifier.scheduler.CosineAnnealingLR_kwargs.eta_min=1e-5 \
         rseed=$rseed \
         classifier.verbose=$verbose \
         # "$@" &

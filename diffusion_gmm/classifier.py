@@ -9,6 +9,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader, Dataset, Subset
+from torchvision import transforms
 from torchvision.datasets import DatasetFolder
 from tqdm.auto import tqdm
 
@@ -31,7 +32,6 @@ class MultiClassSubset(Dataset):
     """
     Wrap a subset of a dataset to apply a mapping of targets (class labels) to
     user-specified multi-class classification labels
-    NOTE: cannot use this with hinge-like loss functions
     """
 
     def __init__(self, subset, class_to_index):
@@ -55,6 +55,8 @@ class ClassifierExperiment:
     Base class for classifier experiments
     """
 
+    # train_dataset: DatasetFolder
+    # test_dataset: DatasetFolder
     dataset: DatasetFolder
 
     # model parameters
@@ -218,9 +220,10 @@ class ClassifierExperiment:
         class_list: List[str],
         dataset_indices: List[int],
         prop_samples_to_use: float = 1.0,
+        use_augmentations: bool = False,
         rng: Optional[np.random.Generator] = None,
         shuffle: bool = True,
-        num_workers: int = 10,
+        num_workers: int = 4,
     ) -> DataLoader:
         """
         Build the dataloaders for the training and test sets.
@@ -233,6 +236,21 @@ class ClassifierExperiment:
         Returns:
             dataloader: DataLoader for the training set
         """
+        # Define the data augmentation pipeline
+        if use_augmentations:
+            transform = transforms.Compose(
+                [
+                    # transforms.RandomHorizontalFlip(),
+                    # transforms.RandomVerticalFlip(),
+                    # transforms.RandomResizedCrop(self.img_shape[1:], scale=(0.8, 1.0)),
+                    # transforms.ColorJitter(
+                    #     brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1
+                    # ),
+                    transforms.ToTensor(),  # Ensure the data is converted to a tensor
+                ]
+            )
+            self.dataset.transform = transform
+
         # Group indices by class
         class_to_indices = {self.class_to_idx[cls]: [] for cls in class_list}
         for idx in dataset_indices:
@@ -253,22 +271,23 @@ class ClassifierExperiment:
             subset_size = int(len(indices) * prop_samples_to_use)
             selected_indices.extend(indices[:subset_size])
 
-        subset_inds = Subset(self.dataset, selected_indices)
         # Map class indices to user-specified multi-class classification labels
-        class_to_label = {
+        class_idx_to_label = {
             self.class_to_idx[cls]: idx for idx, cls in enumerate(class_list)
         }
-        # logger.info("class_to_label mapping: %s", class_to_label)
-        train_subset = MultiClassSubset(subset_inds, class_to_label)
 
-        target_counts = np.bincount([label for _, label in train_subset])
+        selected_subset = MultiClassSubset(
+            Subset(self.dataset, selected_indices), class_idx_to_label
+        )
+
+        target_counts = np.bincount([label for _, label in selected_subset])
 
         if self.verbose:
             logger.info("Built dataloader with %d samples...", len(selected_indices))
             logger.info("Distribution of targets in subset: %s", target_counts)
 
         dataloader = DataLoader(
-            train_subset,
+            selected_subset,
             batch_size=self.batch_size,
             shuffle=True,
             num_workers=num_workers,
@@ -284,6 +303,7 @@ class ClassifierExperiment:
         prop_train_schedule: Sequence[float],
         n_runs: int = 1,
         reset_model_random_seed: bool = False,
+        use_augmentations: bool = False,
         verbose: bool = False,
     ) -> Dict[str, List[List[Tuple[float, float, int]]]]:
         """
@@ -349,8 +369,10 @@ class ClassifierExperiment:
                     class_list,
                     train_subset_inds,
                     prop_samples_to_use=prop_train,
+                    use_augmentations=use_augmentations,
                     rng=rng,
                 )
+
                 best_test_loss = float("inf")
                 for epoch in tqdm(range(self.num_epochs), desc="Training"):
                     train_loss = self.train(train_loader)

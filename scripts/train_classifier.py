@@ -252,6 +252,7 @@ def main(cfg):
         test_subset_inds=test_inds,
         prop_train_schedule=prop_train_schedule,  # type: ignore
         n_runs=cfg.classifier.n_runs,
+        use_augmentations=cfg.classifier.use_augmentations,
         reset_model_random_seed=cfg.classifier.reset_model_random_seed,
         verbose=cfg.classifier.verbose,
     )

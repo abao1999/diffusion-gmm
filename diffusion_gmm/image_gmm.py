@@ -192,6 +192,35 @@ class ImageGMM(GaussianMixture):
         print("Fitting GMM to ", all_images.shape, " samples")
         super().fit(all_images)
 
+    # def compute_statistics(
+    #     self, dataloader: DataLoader
+    # ) -> Tuple[np.ndarray, np.ndarray]:
+    #     all_images = np.concatenate([images.numpy() for images, _ in tqdm(dataloader)])
+    #     # flatten the images
+    #     all_images = all_images.reshape(-1, np.prod(self.img_shape))
+    #     print("Computing statistics for ", all_images.shape, " samples")
+    #     means = all_images.mean(axis=0)
+    #     covariances = np.cov(all_images, rowvar=False)
+    #     return means, covariances
+
+    # def compute_toeplitz_statistics(
+    #     self, dataloader: DataLoader
+    # ) -> Tuple[np.ndarray, np.ndarray]:
+    #     data = np.concatenate([images.numpy() for images, _ in tqdm(dataloader)])
+    #     n_sample, d = data.shape
+    #     mean = np.mean(data, axis=0)
+    #     mean = np.mean(mean) * np.ones(len(mean))
+    #     cov = np.transpose(data) @ data / n_sample - mean.reshape(
+    #         (d, 1)
+    #     ) @ mean.reshape((1, d))
+    #     for j in range(d):
+    #         s = np.zeros(d)
+    #         for t in range(d):
+    #             s[t] = cov[(1 + t) % d, (j + t) % d]
+    #         for t in range(d):
+    #             cov[(1 + t) % d, (j + t) % d] = np.mean(s)
+    #     return mean, cov
+
     def save_samples(
         self,
         n_samples: int,

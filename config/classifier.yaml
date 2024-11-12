@@ -12,6 +12,7 @@ classifier:
   prop_samples_train: 1.0
   n_runs: 10
   n_props_train: 10
+  use_augmentations: false
   reset_model_random_seed: false
   verbose: false
   save_dir: results/classifier
