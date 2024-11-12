@@ -1,6 +1,6 @@
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Type, Union
 
 import numpy as np
@@ -9,113 +9,22 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader, Dataset, Subset
+from torchvision.datasets import DatasetFolder
 from tqdm.auto import tqdm
-
-from diffusion_gmm.utils import get_targets
 
 logger = logging.getLogger(__name__)
 
 
-# Define a simple linear multiclass classifier
-class LinearMulticlassClassifier(nn.Module):
-    """
-    Simple linear multiclass classifier
-    """
-
-    def __init__(self, num_classes: int, input_dim: int):
-        super(LinearMulticlassClassifier, self).__init__()
-        self.fc = nn.Linear(
-            input_dim, num_classes
-        )  # Output num_classes for multiclass classification
-        self.softmax = nn.Softmax(dim=1)
-
-    def forward(self, x):
-        x = x.view(x.size(0), -1)  # Flatten the input
-        return self.softmax(self.fc(x))
-
-
-# Define a fully connected two-layer network for multiclass classification
-class TwoLayerMulticlassClassifier(nn.Module):
-    """
-    Two-layer fully connected multiclass classifier
-    """
-
-    def __init__(self, num_classes: int, input_dim: int, hidden_dim: int):
-        super(TwoLayerMulticlassClassifier, self).__init__()
-        self.fc1 = nn.Linear(input_dim, hidden_dim)  # First layer
-        self.relu = nn.ReLU()  # Activation function
-        self.fc2 = nn.Linear(hidden_dim, num_classes)  # Second layer
-        self.softmax = nn.Softmax(dim=1)  # Output layer for multiclass classification
-
-    def forward(self, x):
-        x = x.view(x.size(0), -1)  # Flatten the input
-        x = self.relu(self.fc1(x))  # First layer with ReLU activation
-        return self.softmax(self.fc2(x))  # Second layer with Softmax activation
-
-
 # Define a simple linear classifier
-class LinearBinaryClassifier(nn.Module):
-    """
-    Simple linear binary classifier
-    """
-
-    def __init__(self, num_classes: int, input_dim: int, output_logit: bool = False):
-        """
-        num_classes must be 2 for binary classification
-        if output_logit is True, the output will be logits (unconstrained)
-            This is meant to be used with BCEWithLogitsLoss
-        Otherwise, the output will be constrained to be between 0 and 1 (probability) and it is recommended to use BCELoss
-        """
-        if num_classes != 2:
-            raise ValueError("num_classes must be 2 for binary classification")
-        super(LinearBinaryClassifier, self).__init__()
+class BinaryLinearClassifier(nn.Module):
+    def __init__(self, input_dim):
+        super(BinaryLinearClassifier, self).__init__()
         self.fc = nn.Linear(input_dim, 1)  # Output 1 for binary classification
         self.sigmoid = nn.Sigmoid()
-        self.output_logit = output_logit
 
     def forward(self, x):
         x = x.view(x.size(0), -1)  # Flatten the input
-        if self.output_logit:
-            return self.fc(x)
-        else:
-            return self.sigmoid(self.fc(x))
-
-
-# Define a two-layer fully connected binary classifier
-class TwoLayerBinaryClassifier(nn.Module):
-    """
-    Two-layer fully connected binary classifier
-    """
-
-    def __init__(
-        self,
-        num_classes: int,
-        input_dim: int,
-        hidden_dim: int,
-        output_logit: bool = False,
-    ):
-        """
-        num_classes must be 2 for binary classification
-        if output_logit is True, the output will be logits (unconstrained)
-            This is meant to be used with BCEWithLogitsLoss
-        Otherwise, the output will be constrained to be between 0 and 1 (probability) and it is recommended to use BCELoss
-        """
-        if num_classes != 2:
-            raise ValueError("num_classes must be 2 for binary classification")
-        super(TwoLayerBinaryClassifier, self).__init__()
-        self.fc1 = nn.Linear(input_dim, hidden_dim)  # First layer
-        self.relu = nn.ReLU()  # Activation function
-        self.fc2 = nn.Linear(hidden_dim, 1)  # Second layer for binary classification
-        self.sigmoid = nn.Sigmoid()
-        self.output_logit = output_logit
-
-    def forward(self, x):
-        x = x.view(x.size(0), -1)  # Flatten the input
-        x = self.relu(self.fc1(x))  # First layer with ReLU activation
-        if self.output_logit:
-            return self.fc2(x)  # Return logits
-        else:
-            return self.sigmoid(self.fc2(x))  # Return probabilities
+        return self.sigmoid(self.fc(x))
 
 
 class MultiClassSubset(Dataset):
@@ -145,9 +54,7 @@ class ClassifierExperiment:
     Base class for classifier experiments
     """
 
-    train_subset: Subset
-    test_subset: Subset
-
+    dataset: DatasetFolder
     class_list: List[str]
 
     # model parameters
@@ -156,11 +63,9 @@ class ClassifierExperiment:
     optimizer_class: Type[optim.Optimizer] = optim.SGD
     lr_scheduler_class: Optional[Type[lr_scheduler.LRScheduler]] = None
 
-    model_kwargs: Optional[Dict[str, Any]] = None
-    optimizer_kwargs: Optional[Dict[str, Any]] = None
-    scheduler_kwargs: Optional[Dict[str, Any]] = None
+    optimizer_kwargs: Dict[str, Any] = field(default_factory=dict)
+    scheduler_kwargs: Dict[str, Any] = field(default_factory=dict)
 
-    # training parameters
     lr: float = 1e-3
     device: Union[torch.device, str] = "cpu"
     rseed: int = 99
@@ -173,41 +78,42 @@ class ClassifierExperiment:
         else:
             self.device = torch.device("cpu")
             print("CUDA is not available. Using CPU instead.")
-        print("device: ", self.device)
-        print("current device: ", torch.cuda.current_device())
-
-        self.criterion = self.criterion_class()
-
-        sample, _ = self.train_subset.dataset[0]
-        if isinstance(sample, torch.Tensor):
-            self.img_shape = sample.shape
-        else:
-            raise ValueError("Sample is not a tensor")
+        logger.info("Using device: %s", self.device)
 
         self.rng = np.random.default_rng(self.rseed)
 
-        if self.model_class in [LinearBinaryClassifier, TwoLayerBinaryClassifier]:
-            # BCELoss and MSELoss require labels to be floats (same type as output)
-            # Furthremore, predictions are made by rounding scalar, rather than taking torch.max
-            self.use_binary_classifier = True
+        self.criterion = self.criterion_class()
+
+        self.img_shape = tuple(self.dataset[0][0].shape)
+        print("Image shape: ", self.img_shape)
+        self.targets = self._get_targets()
+
+    def _get_targets(self) -> List[int]:
+        # For datasets like CIFAR10, use targets attribute
+        if hasattr(self.dataset, "targets"):
+            targets = self.dataset.targets  # type: ignore
+        # For ImageFolder, reconstruct targets from samples
+        elif hasattr(self.dataset, "samples"):
+            targets = [class_idx for _, class_idx in self.dataset.samples]  # type: ignore
         else:
-            self.use_binary_classifier = False
+            raise AttributeError(
+                "Dataset doesn't have 'targets' or 'samples' attribute"
+            )
+        return targets
 
     def make_model_and_optimizer(self):
-        self.model = self.model_class(
-            num_classes=len(self.class_list),
-            input_dim=np.prod(self.img_shape),
-            **(self.model_kwargs or {}),
-        ).to(self.device)
+        self.model = BinaryLinearClassifier(input_dim=np.prod(self.img_shape)).to(
+            self.device
+        )
         # self.model.to(self.device)
         self.optimizer = self.optimizer_class(
             self.model.parameters(),
             lr=self.lr,  # type: ignore
-            **(self.optimizer_kwargs or {}),
+            **self.optimizer_kwargs,
         )
         if self.lr_scheduler_class is not None:
             self.scheduler = self.lr_scheduler_class(
-                self.optimizer, **(self.scheduler_kwargs or {})
+                self.optimizer, **self.scheduler_kwargs
             )
         else:
             self.scheduler = None
@@ -221,9 +127,7 @@ class ClassifierExperiment:
         for inputs, labels in dataloader:
             inputs, labels = (
                 inputs.to(self.device).float(),
-                labels.to(self.device).long()
-                if not self.use_binary_classifier
-                else labels.to(self.device).float(),
+                labels.to(self.device).float(),
             )
             self.optimizer.zero_grad()
             outputs = self.model(inputs).squeeze()
@@ -247,17 +151,12 @@ class ClassifierExperiment:
             for inputs, labels in dataloader:
                 inputs, labels = (
                     inputs.to(self.device).float(),
-                    labels.to(self.device).long()
-                    if not self.use_binary_classifier
-                    else labels.to(self.device).float(),
+                    labels.to(self.device).float(),
                 )
                 outputs = self.model(inputs).squeeze()
                 loss = self.criterion(outputs, labels)
                 running_loss += loss.item() * inputs.size(0)
-                if self.use_binary_classifier:
-                    preds = torch.round(outputs)  # binary predictions
-                else:
-                    _, preds = torch.max(outputs, dim=1)
+                preds = torch.round(outputs)  # binary predictions
                 correct += (preds == labels).sum().item()
 
             n_total = len(dataloader.dataset)  # type: ignore
@@ -265,29 +164,77 @@ class ClassifierExperiment:
         accuracy = correct / n_total
         return avg_loss, accuracy
 
+    def get_split_indices(
+        self,
+        max_allowed_samples_per_class: Optional[int] = None,
+        train_split: float = 0.8,
+    ) -> Tuple[List[int], List[int]]:
+        """
+        Get the indices for the training and test subsets
+        """
+
+        # Group indices by class
+        class_to_indices = {
+            self.dataset.class_to_idx[cls]: [] for cls in self.class_list
+        }
+        for i, class_idx in enumerate(self.targets):
+            if class_idx in class_to_indices:
+                class_to_indices[class_idx].append(i)
+
+        for indices in class_to_indices.values():
+            self.rng.shuffle(indices)
+
+        # Determine the minimum number of samples in the class with the fewest samples
+        n_samples_per_class = min(len(indices) for indices in class_to_indices.values())
+
+        # If max_allowed_samples_per_class is specified, limit the samples per class
+        if max_allowed_samples_per_class is not None:
+            n_samples_per_class = min(
+                n_samples_per_class,
+                max_allowed_samples_per_class,
+            )
+
+        if self.verbose:
+            logger.info("number of samples in smallest class: %d", n_samples_per_class)
+            logger.info("number of samples per class to use: %d", n_samples_per_class)
+
+        # Sample equal number of indices from each class
+        train_size_per_class = int(n_samples_per_class * train_split)
+        balanced_train_inds = []
+        balanced_test_inds = []
+        for indices in class_to_indices.values():
+            balanced_train_inds.extend(indices[:train_size_per_class])
+            balanced_test_inds.extend(indices[train_size_per_class:n_samples_per_class])
+        return balanced_train_inds, balanced_test_inds
+
     def _build_dataloader(
         self,
-        subset: Subset,
+        dataset: DatasetFolder,
         prop_samples_to_use: float = 1.0,
         rng: Optional[np.random.Generator] = None,
         shuffle: bool = True,
         batch_size: int = 64,
         num_workers: int = 4,
     ) -> DataLoader:
-        dataset = subset.dataset
-        class_to_idx = dataset.class_to_idx  # type: ignore
-        # Map class indices to user-specified multi-class classification labels
-        class_idx_to_label = {
-            class_to_idx[cls]: idx for idx, cls in enumerate(self.class_list)
-        }
-        if prop_samples_to_use < 1.0:
-            subset_indices = subset.indices
-            targets = get_targets(dataset)  # type: ignore
+        """
+        Build the dataloaders for the training and test sets.
+        Args:
+            class_list: List of class names to use for classification
+            dataset_indices: Indices to use from the dataset
+            prop_samples_to_use: Proportion of samples in dataset to use for training
+            rng: Random number generator to use for shuffling. Defaults to self.rng
+            shuffle: Whether to shuffle the dataset indices
+        Returns:
+            dataloader: DataLoader for the training set
+        """
 
+        if prop_samples_to_use < 1.0:
             # Group indices by class
-            class_to_indices = {class_to_idx[cls]: [] for cls in self.class_list}
-            for idx in subset_indices:
-                class_idx = targets[idx]
+            class_to_indices = {
+                dataset.class_to_idx[cls]: [] for cls in self.class_list
+            }
+            for idx in dataset_indices:
+                class_idx = self.targets[idx]
                 if class_idx in class_to_indices:
                     class_to_indices[class_idx].append(idx)
                 else:
@@ -303,16 +250,22 @@ class ClassifierExperiment:
                     rng.shuffle(indices)
                 subset_size = int(len(indices) * prop_samples_to_use)
                 selected_indices.extend(indices[:subset_size])
-
-            selected_subset = MultiClassSubset(
-                Subset(dataset, selected_indices), class_idx_to_label
-            )
         else:
-            selected_subset = MultiClassSubset(subset, class_idx_to_label)
+            selected_indices = dataset_indices
+
+        # Map class indices to user-specified multi-class classification labels
+        class_idx_to_label = {
+            self.class_to_idx[cls]: idx for idx, cls in enumerate(class_list)
+        }
+
+        selected_subset = MultiClassSubset(
+            Subset(self.dataset, selected_indices), class_idx_to_label
+        )
+
+        target_counts = np.bincount([label for _, label in selected_subset])
 
         if self.verbose:
-            target_counts = np.bincount([label for _, label in selected_subset])
-            logger.info("Built dataloader with %d samples...", len(selected_subset))
+            logger.info("Built dataloader with %d samples...", len(selected_indices))
             logger.info("Distribution of targets in subset: %s", target_counts)
 
         dataloader = DataLoader(
@@ -326,11 +279,11 @@ class ClassifierExperiment:
 
     def run(
         self,
+        num_epochs: int,
+        batch_size: int,
         prop_train_schedule: Sequence[float],
         n_runs: int = 1,
         reset_model_random_seed: bool = False,
-        num_epochs: int = 20,
-        batch_size: int = 64,
         verbose: bool = False,
     ) -> Dict[str, List[List[Tuple[float, float, int]]]]:
         """
@@ -341,19 +294,17 @@ class ClassifierExperiment:
             test_subset_inds: Indices to use for testing
         """
         if verbose:
-            logger.info(
-                "Running classifier experiment with %s classes...", self.class_list
-            )
+            logger.info("Running classifier experiment with %s classes...", class_list)
             logger.info("prop_train_schedule: %s", prop_train_schedule)
             logger.info(
-                "Building test dataloader with %d samples...",
-                len(self.test_subset.indices),
+                "Building test dataloader with %d samples...", len(test_subset_inds)
             )
 
         n_props_train = len(prop_train_schedule)
-
         test_loader = self._build_dataloader(
-            self.test_subset, batch_size=batch_size, shuffle=False
+            self.dataset,
+            prop_samples_to_use=1.0,
+            batch_size=batch_size,
         )
 
         rng_stream = self.rng.spawn(n_runs)
@@ -388,21 +339,20 @@ class ClassifierExperiment:
 
                 prop_train = prop_train_schedule[prop_idx]
 
-                # build train dataloader
-                train_loader = self._build_dataloader(
-                    self.train_subset,
-                    prop_samples_to_use=prop_train,
-                    batch_size=batch_size,
-                    rng=rng,
-                )
-
                 if verbose:
                     logger.info(
                         f"run {run_idx}, prop_train {prop_train_schedule[prop_idx]}"
                     )
                     logger.info(
-                        f"Building train dataloader using {len(train_loader.dataset)} samples from the training split..."  # type: ignore
+                        f"Building train dataloader using {prop_train} * {len(train_subset_inds)} samples from the training split...",
                     )
+
+                train_loader = self._build_dataloader(
+                    class_list,
+                    train_subset_inds,
+                    prop_samples_to_use=prop_train,
+                    rng=rng,
+                )
 
                 best_test_loss = float("inf")
                 for epoch in tqdm(range(num_epochs), desc="Training"):

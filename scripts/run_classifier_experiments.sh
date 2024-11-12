@@ -11,29 +11,29 @@ max_allowed_samples_per_class=1024
 train_split=0.8
 batch_size=64
 lr=1e-3  # 3e-4
-criterion=MSELoss
+model_class=TwoLayerMulticlassClassifier
+# model_class=LinearBinaryClassifier
+criterion=CrossEntropyLoss
+# criterion=MSELoss
 optimizer_class=SGD
 scheduler_class=CosineAnnealingLR
 rseed=10
+use_augmentations=false
 verbose=false
 
-dataset_list=("edm_imagenet64" "gmm_imagenet64", "imagenette64")
+dataset_list=("edm_imagenet64" "gmm_imagenet64" "imagenette64")
 for i in "${!dataset_list[@]}"; do
     dataset=${dataset_list[i]}
-    # device_idx=$((6 - i))
-    use_augmentations=false
-    # if [ $i -eq 1 ]; then
-    #     use_augmentations=false
-    # fi
-    # echo $use_augmentations
     device_idx=6
     echo $dataset
     echo $device_idx
     python scripts/train_classifier.py \
-        experiment.data_dir=$data_dir/$dataset \
+        classifier.train_data_dir=$data_dir/$dataset \
+        classifier.test_data_dir=null \
         classifier.max_allowed_samples_per_class=$max_allowed_samples_per_class \
+        classifier.model.name=$model_class \
         classifier.criterion=$criterion \
-        classifier.class_list='["english_springer", "french_horn"]' \
+        classifier.class_list='["english_springer", "french_horn", "church"]' \
         classifier.num_epochs=$num_epochs \
         classifier.lr=$lr \
         classifier.train_split=$train_split \
@@ -43,10 +43,10 @@ for i in "${!dataset_list[@]}"; do
         classifier.use_augmentations=$use_augmentations \
         classifier.reset_model_random_seed=$reset_model_random_seed \
         classifier.save_dir=$save_dir \
-        classifier.save_name=${dataset}_english-springer_french-horn \
+        classifier.save_name=${dataset}_english-springer_french-horn_church \
         classifier.device=cuda:${device_idx} \
-        classifier.optimizer.method=$optimizer_class \
-        classifier.scheduler.method=$scheduler_class \
+        classifier.optimizer.name=$optimizer_class \
+        classifier.scheduler.name=$scheduler_class \
         classifier.scheduler.CosineAnnealingLR_kwargs.T_max=$num_epochs \
         classifier.scheduler.CosineAnnealingLR_kwargs.eta_min=1e-5 \
         rseed=$rseed \
