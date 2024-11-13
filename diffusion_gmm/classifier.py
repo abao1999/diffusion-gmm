@@ -358,9 +358,7 @@ class ClassifierExperiment:
 
         rng_stream = self.rng.spawn(n_runs)
 
-        final_train_losses_all_runs = []
-        final_test_losses_all_runs = []
-        final_accuracies_all_runs = []
+        results_all_runs = []
         for run_idx in tqdm(range(n_runs), desc="Running classifier experiment"):
             # fix random seed for each run
             rng = rng_stream[run_idx]
@@ -376,9 +374,7 @@ class ClassifierExperiment:
                     torch.cuda.manual_seed_all(rseed)  # if you have multiple GPUs
 
             # train on different proportions of the training set, defined by prop_train_schedule
-            final_train_losses = [(-1.0, -1.0, -1)] * n_props_train
-            final_test_losses = [(-1.0, -1.0, -1)] * n_props_train
-            final_accuracies = [(-1.0, -1.0, -1)] * n_props_train
+            results: List[Dict[str, Any]] = [{}] * n_props_train
             for prop_idx in tqdm(
                 range(n_props_train),
                 desc="Training on different proportions of the training set",
@@ -394,6 +390,7 @@ class ClassifierExperiment:
                     prop_samples_to_use=prop_train,
                     batch_size=batch_size,
                     rng=rng,
+                    shuffle=True,
                 )
 
                 if verbose:
@@ -410,12 +407,16 @@ class ClassifierExperiment:
                     test_loss, accuracy = self.evaluate(test_loader)
                     if test_loss < best_test_loss:
                         best_test_loss = test_loss
-                        final_train_losses[prop_idx] = (prop_train, train_loss, epoch)
-                        final_test_losses[prop_idx] = (prop_train, test_loss, epoch)
-                        final_accuracies[prop_idx] = (prop_train, accuracy, epoch)
+                        results[prop_idx] = {
+                            "num_train_samples": len(train_loader.dataset),  # type: ignore
+                            "train_loss": train_loss,
+                            "test_loss": test_loss,
+                            "accuracy": accuracy,
+                            "epoch": epoch,
+                        }
                     if self.scheduler is not None:
                         self.scheduler.step()
-                    if verbose and (epoch + 1) % 10 == 0:
+                    if verbose and (epoch + 1) % 50 == 0:
                         logger.info(
                             "Epoch [%d/%d], Train Loss: %f, Test Loss: %f, Accuracy: %f%%",
                             epoch + 1,
@@ -428,24 +429,35 @@ class ClassifierExperiment:
                             "Learning rate: %f", self.optimizer.param_groups[0]["lr"]
                         )
 
-                logger.info(f"run {run_idx} prop {prop_train} finished")
                 logger.info(
-                    f"train loss for prop {prop_train}: {final_train_losses[prop_idx]}"
+                    "Final results for run %d, prop %f: %s",
+                    run_idx,
+                    prop_train,
+                    results[prop_idx],
                 )
-                logger.info(
-                    f"test loss for prop {prop_train}: {final_test_losses[prop_idx]}"
-                )
-                logger.info(
-                    f"accuracy for prop {prop_train}: {final_accuracies[prop_idx]}"
-                )
-            final_train_losses_all_runs.append(final_train_losses)
-            final_test_losses_all_runs.append(final_test_losses)
-            final_accuracies_all_runs.append(final_accuracies)
+            results_all_runs.append(results)
 
         results_dict = {
-            "train_losses": final_train_losses_all_runs,
-            "test_losses": final_test_losses_all_runs,
-            "accuracies": final_accuracies_all_runs,
+            "num_train_samples": [
+                [result[prop_idx]["num_train_samples"] for result in results_all_runs]
+                for prop_idx in range(n_props_train)
+            ],
+            "train_losses": [
+                [result[prop_idx]["train_loss"] for result in results_all_runs]
+                for prop_idx in range(n_props_train)
+            ],
+            "test_losses": [
+                [result[prop_idx]["test_loss"] for result in results_all_runs]
+                for prop_idx in range(n_props_train)
+            ],
+            "accuracies": [
+                [result[prop_idx]["accuracy"] for result in results_all_runs]
+                for prop_idx in range(n_props_train)
+            ],
+            "epochs": [
+                [result[prop_idx]["epoch"] for result in results_all_runs]
+                for prop_idx in range(n_props_train)
+            ],
         }
         if verbose:
             logger.info("Results:\n%s", json.dumps(results_dict, indent=4))

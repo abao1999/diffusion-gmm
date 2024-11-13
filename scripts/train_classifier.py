@@ -19,8 +19,6 @@ from diffusion_gmm import classifier
 from diffusion_gmm.classifier import ClassifierExperiment
 from diffusion_gmm.utils import (
     get_targets,
-    plot_accuracies,
-    plot_training_history,
     set_seed,
 )
 
@@ -28,35 +26,6 @@ from diffusion_gmm.utils import (
 def npy_loader(path):
     sample = torch.from_numpy(np.load(path))
     return sample
-
-
-def plot_results():
-    run_names = {
-        "real": "imagenette64_english-springer_french-horn",
-        "diffusion": "edm_imagenet64_english-springer_french-horn",
-        "gmm": "gmm_imagenet64_english-springer_french-horn",
-    }
-    accuracies = {}
-    for run_name in run_names:
-        json_path = f"results/classifier/{run_names[run_name]}_results.json"
-        with open(json_path, "r") as f:
-            results_dict = json.load(f)
-        accuracies[run_name] = results_dict["accuracies"]
-        plot_training_history(
-            train_loss_history_all_runs=results_dict["train_losses"],
-            test_loss_history_all_runs=results_dict["test_losses"],
-            accuracy_history_all_runs=results_dict["accuracies"],
-            save_name=f"loss_accuracy_{run_name}.png",
-            title="Binary Linear Classifier",
-            save_dir="plots",
-        )
-
-    plot_accuracies(
-        accuracies,
-        save_name="accuracies.png",
-        title="Binary Linear Classifier",
-        save_dir="plots",
-    )
 
 
 def split_dataset_balanced(
@@ -286,15 +255,6 @@ def main(cfg):
 
     with open(results_file_path, "w") as results_file:
         json.dump(results_dict, results_file, indent=4)
-
-    # generate plots for train and test loss, accuracy
-    plot_training_history(
-        results_dict["train_losses"],
-        results_dict["test_losses"],
-        results_dict["accuracies"],
-        save_name=f"loss_accuracy_{cfg.classifier.save_name}.png",
-        title="Binary Linear Classifier",
-    )
 
 
 if __name__ == "__main__":

@@ -2,29 +2,30 @@
 main_dir=$(dirname "$(dirname "$0")")
 data_dir=$WORK/vision_datasets
 
-n_runs=10
+n_runs=20
 n_props_train=4
 reset_model_random_seed=true
 save_dir=results/classifier
-num_epochs=200
-max_allowed_samples_per_class=1024
+num_epochs=400
+max_allowed_samples_per_class=4096
 train_split=0.8
-batch_size=64
+batch_size=128
 lr=1e-3  # 3e-4
-model_class=TwoLayerMulticlassClassifier
-# model_class=LinearBinaryClassifier
-criterion=CrossEntropyLoss
-# criterion=MSELoss
+# model_class=TwoLayerMulticlassClassifier
+model_class=LinearBinaryClassifier
+# criterion=CrossEntropyLoss
+criterion=MSELoss
 optimizer_class=SGD
 scheduler_class=CosineAnnealingLR
 rseed=10
 use_augmentations=false
-verbose=false
+verbose=true
 
-dataset_list=("edm_imagenet64" "gmm_imagenet64" "imagenette64")
+# dataset_list=("edm_imagenet64" "gmm_imagenet64" "imagenette64")
+dataset_list=("edm_imagenet64_big" "gmm_edm_imagenet64_big")
 for i in "${!dataset_list[@]}"; do
     dataset=${dataset_list[i]}
-    device_idx=6
+    device_idx=2
     echo $dataset
     echo $device_idx
     python scripts/train_classifier.py \
@@ -33,7 +34,7 @@ for i in "${!dataset_list[@]}"; do
         classifier.max_allowed_samples_per_class=$max_allowed_samples_per_class \
         classifier.model.name=$model_class \
         classifier.criterion=$criterion \
-        classifier.class_list='["english_springer", "french_horn", "church"]' \
+        classifier.class_list='["english_springer", "french_horn"]' \
         classifier.num_epochs=$num_epochs \
         classifier.lr=$lr \
         classifier.train_split=$train_split \
@@ -43,12 +44,12 @@ for i in "${!dataset_list[@]}"; do
         classifier.use_augmentations=$use_augmentations \
         classifier.reset_model_random_seed=$reset_model_random_seed \
         classifier.save_dir=$save_dir \
-        classifier.save_name=${dataset}_english-springer_french-horn_church \
+        classifier.save_name=${dataset}_english-springer_french-horn \
         classifier.device=cuda:${device_idx} \
         classifier.optimizer.name=$optimizer_class \
         classifier.scheduler.name=$scheduler_class \
         classifier.scheduler.CosineAnnealingLR_kwargs.T_max=$num_epochs \
-        classifier.scheduler.CosineAnnealingLR_kwargs.eta_min=1e-5 \
+        classifier.scheduler.CosineAnnealingLR_kwargs.eta_min=1e-4 \
         rseed=$rseed \
         classifier.verbose=$verbose \
         # "$@" &

@@ -141,7 +141,7 @@ class ImageGMM(GaussianMixture):
         return shape
 
     def _build_dataloader(
-        self, num_samples: int, target_class: Optional[str] = None
+        self, num_samples: int, target_class: Optional[str] = None, num_workers: int = 4
     ) -> DataLoader:
         num_tot_samples = len(self.data)
         if target_class is None:
@@ -178,7 +178,11 @@ class ImageGMM(GaussianMixture):
 
         custom_sampler = SubsetRandomSampler(indices)
         dataloader = DataLoader(
-            self.data, batch_size=self.batch_size, shuffle=False, sampler=custom_sampler
+            self.data,
+            batch_size=self.batch_size,
+            shuffle=False,
+            sampler=custom_sampler,
+            num_workers=num_workers,
         )
         return dataloader
 
@@ -191,35 +195,6 @@ class ImageGMM(GaussianMixture):
         all_images = all_images.reshape(-1, np.prod(self.img_shape))
         print("Fitting GMM to ", all_images.shape, " samples")
         super().fit(all_images)
-
-    # def compute_statistics(
-    #     self, dataloader: DataLoader
-    # ) -> Tuple[np.ndarray, np.ndarray]:
-    #     all_images = np.concatenate([images.numpy() for images, _ in tqdm(dataloader)])
-    #     # flatten the images
-    #     all_images = all_images.reshape(-1, np.prod(self.img_shape))
-    #     print("Computing statistics for ", all_images.shape, " samples")
-    #     means = all_images.mean(axis=0)
-    #     covariances = np.cov(all_images, rowvar=False)
-    #     return means, covariances
-
-    # def compute_toeplitz_statistics(
-    #     self, dataloader: DataLoader
-    # ) -> Tuple[np.ndarray, np.ndarray]:
-    #     data = np.concatenate([images.numpy() for images, _ in tqdm(dataloader)])
-    #     n_sample, d = data.shape
-    #     mean = np.mean(data, axis=0)
-    #     mean = np.mean(mean) * np.ones(len(mean))
-    #     cov = np.transpose(data) @ data / n_sample - mean.reshape(
-    #         (d, 1)
-    #     ) @ mean.reshape((1, d))
-    #     for j in range(d):
-    #         s = np.zeros(d)
-    #         for t in range(d):
-    #             s[t] = cov[(1 + t) % d, (j + t) % d]
-    #         for t in range(d):
-    #             cov[(1 + t) % d, (j + t) % d] = np.mean(s)
-    #     return mean, cov
 
     def save_samples(
         self,
@@ -238,6 +213,79 @@ class ImageGMM(GaussianMixture):
         ), "Mismatch between the number of features and the image shape"
 
         samples = samples.reshape(-1, *self.img_shape)
+        if self.verbose:
+            print("Samples shape: ", samples.shape)
+            print(f"Saving {n_samples} samples from the fitted GMM to {save_dir}...")
+
+        os.makedirs(save_dir, exist_ok=True)
+        print("Saving samples to ", save_dir)
+
+        for i, img in enumerate(samples):
+            save_path = os.path.join(save_dir, f"sample_{i}.npy")
+            np.save(save_path, img)
+
+        return samples
+
+    # Function to compute mean and covariance matrix from dataset
+    def compute_mean_and_covariance(
+        self,
+        num_samples: int,
+        target_class: Optional[str] = None,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Compute the mean and covariance matrix from the dataset by flattening the images from the dataloader
+        """
+        all_pixels = []
+        dataloader = self._build_dataloader(num_samples, target_class)
+        # Accumulate all image pixel values
+        for idx, (images, _) in tqdm(enumerate(dataloader)):
+            # Flatten images to 2D: (number of images, number of pixels per image)
+            flattened_images = images.view(images.size(0), -1).numpy()
+            all_pixels.append(flattened_images)
+
+        # Concatenate all pixel values
+        all_pixels = np.concatenate(all_pixels, axis=0)
+
+        # Compute the mean and covariance
+        mean = np.mean(all_pixels, axis=0)
+        # get the pixel-wise covariance matrix
+        covariance = np.cov(all_pixels, rowvar=False)
+
+        return mean, covariance
+
+    def save_samples_single_class(
+        self,
+        mean: np.ndarray,
+        covariance: np.ndarray,
+        n_samples: int,
+        save_dir: str,
+    ) -> np.ndarray:
+        """
+        Generate samples from a single class by simply creating synthetic Gaussian data with same mean and covariance as images in that class
+        Saves samples as images with self.img_shape
+        Args:
+            mean: Mean of the Gaussian distribution
+            covariance: Covariance matrix of the Gaussian distribution
+            n_samples: Number of samples to generate
+            save_dir: Directory to save the samples after converting to images
+            plot_kwargs: Keyword arguments for saving and plotting the images
+        Returns:
+            samples: Generated samples from the fitted GMM
+        """
+
+        print("mean shape: ", mean.shape)
+        print("covariance shape: ", covariance.shape)
+        print("Generating samples...")
+        samples = np.random.multivariate_normal(mean, covariance, size=n_samples)
+
+        sample_shape = samples[0].shape
+
+        assert (
+            np.prod(self.img_shape) == sample_shape
+        ), "New shape does not match the sample shape"
+
+        samples = samples.reshape(-1, *self.img_shape)
+
         if self.verbose:
             print("Samples shape: ", samples.shape)
             print(f"Saving {n_samples} samples from the fitted GMM to {save_dir}...")

@@ -2,66 +2,54 @@
 main_dir=$(dirname "$(dirname "$0")")
 data_dir=$WORK/vision_datasets
 
-n_samples=1024
-target_class="french_horn"
+n_samples=4096
+target_class="english_springer"
 
 # Experiment for imagenet downsized to 64x64 (imagenet64)
 
-# # sample edm for imagenet class. NOTE: this is done in edm repo
-# torchrun --standalone --nproc_per_node=2 generate.py \
-#         --outdir=$WORK/vision_datasets/edm_imagenet64/$target_class \
-#         --class=$class_idx \
-#         --seeds=0-1023 \
-#         --batch=64 \
-#         --steps=256 \
-#         --S_churn=40 \
-#         --S_min=0.05 \
-#         --S_max=50 \
-#         --S_noise=1.003 \
-#         --network=https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-imagenet-64x64-cond-adm.pkl
+# # compute gram spectrum for imagenet64 class
+# python scripts/compute_gram_spectrum.py \
+#         experiment.data_dir=$data_dir/imagenette64 \
+#         experiment.batch_size=32 \
+#         experiment.target_class=$target_class \
+#         experiment.num_samples=$n_samples \
+#         experiment.save_dir=results/gram_spectrum \
+#         experiment.save_name=imagenet64_${target_class}_gram_spectrum.npy \
 
-# sample gmm for imagenet64 class
-python scripts/sample_gmm.py \
-        gmm.n_components=1 \
-        gmm.data_dir=$data_dir/imagenette64 \
-        gmm.covariance_type=full \
-        gmm.batch_size=32 \
-        gmm.target_class=$target_class \
-        gmm.n_samples_fit=$n_samples \
-        gmm.n_samples_generate=$n_samples \
-        gmm.save_dir=$data_dir/gmm_imagenet64/$target_class \
+# # compute gram spectrum for imagenet64 class gmm samples
+# python scripts/compute_gram_spectrum.py \
+#         experiment.data_dir=$data_dir/gmm_imagenet64 \
+#         experiment.load_npy=true \
+#         experiment.batch_size=32 \
+#         experiment.target_class=$target_class \
+#         experiment.num_samples=$n_samples \
+#         experiment.save_dir=results/gram_spectrum \
+#         experiment.save_name=imagenet64_${target_class}_gmm_gram_spectrum.npy \
 
-# compute gram spectrum for imagenet64 class
-python scripts/compute_gram_spectrum.py \
-        experiment.data_dir=$data_dir/imagenette64 \
-        experiment.batch_size=32 \
-        experiment.target_class=$target_class \
-        experiment.num_samples=$n_samples \
-        experiment.save_dir=results/gram_spectrum \
-        experiment.save_name=imagenet64_${target_class}_gram_spectrum.npy \
+# # compute gram spectrum for imagenet64 class diffusion samples
+# python scripts/compute_gram_spectrum.py \
+#         experiment.data_dir=$data_dir/edm_imagenet64 \
+#         experiment.batch_size=32 \
+#         experiment.target_class=$target_class \
+#         experiment.num_samples=$n_samples \
+#         experiment.save_dir=results/gram_spectrum \
+#         experiment.save_name=imagenet64_${target_class}_edm_gram_spectrum.npy \
 
 # compute gram spectrum for imagenet64 class gmm samples
 python scripts/compute_gram_spectrum.py \
-        experiment.data_dir=$data_dir/gmm_imagenet64 \
+        experiment.data_dir=$data_dir/gmm_edm_imagenet64_big \
         experiment.load_npy=true \
         experiment.batch_size=32 \
         experiment.target_class=$target_class \
         experiment.num_samples=$n_samples \
         experiment.save_dir=results/gram_spectrum \
-        experiment.save_name=imagenet64_${target_class}_gmm_gram_spectrum.npy \
+        experiment.save_name=imagenet64_${target_class}_gmm_gram_spectrum_run3.npy \
 
-# compute gram spectrum for imagenet64 class diffusion samples
-python scripts/compute_gram_spectrum.py \
-        experiment.data_dir=$data_dir/edm_imagenet64 \
-        experiment.batch_size=32 \
-        experiment.target_class=$target_class \
-        experiment.num_samples=$n_samples \
-        experiment.save_dir=results/gram_spectrum \
-        experiment.save_name=imagenet64_${target_class}_edm_gram_spectrum.npy \
+# run2 was made with gmm_imagenette64
 
 python scripts/plot_spectra.py \
         --real_path results/gram_spectrum/imagenet64_${target_class}_gram_spectrum.npy \
-        --gmm_path results/gram_spectrum/imagenet64_${target_class}_gmm_gram_spectrum.npy \
+        --gmm_path results/gram_spectrum/imagenet64_${target_class}_gmm_gram_spectrum_run3.npy \
         --diffusion_path results/gram_spectrum/imagenet64_${target_class}_edm_gram_spectrum.npy 
 
 # Experiment for cifar10
