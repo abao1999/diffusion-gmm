@@ -35,7 +35,7 @@ def split_dataset_balanced(
     train_split: float = 0.8,
     rng: Optional[np.random.Generator] = None,
     verbose: bool = False,
-) -> Tuple[Subset, Subset]:
+) -> Tuple[Subset, Optional[Subset]]:
     """
     Get the indices for the training and test subsets
     """
@@ -74,10 +74,15 @@ def split_dataset_balanced(
         balanced_train_inds.extend(indices[:train_size_per_class])
         balanced_test_inds.extend(indices[train_size_per_class:n_samples_per_class])
 
-    dataset_copy = copy.deepcopy(dataset)
     # return balanced_train_inds, balanced_test_inds
     train_subset = Subset(dataset, balanced_train_inds)
-    test_subset = Subset(dataset_copy, balanced_test_inds)
+
+    if train_split < 1.0:
+        # default behavior is to clone the datasets so train_subset and test_subset have their own instance
+        dataset_copy = copy.deepcopy(dataset)
+        test_subset = Subset(dataset_copy, balanced_test_inds)
+    else:
+        test_subset = None
     return train_subset, test_subset
 
 
@@ -100,57 +105,45 @@ def setup_dataset(
     return dataset, is_npy_dataset
 
 
-def make_train_test_subsets(
+def make_balanced_subsets(
     class_list: List[str],
-    train_data_dir: str,
-    test_data_dir: Optional[str],
+    data_dir: str,
     max_allowed_samples_per_class: Optional[int],
     train_split: float = 0.8,
     use_augmentations: bool = False,
     rng: Optional[np.random.Generator] = None,
     verbose: bool = False,
-) -> Tuple[Subset, Subset]:
-    train_dataset, is_npy_dataset = setup_dataset(train_data_dir)
+) -> Tuple[Subset, Optional[Subset]]:
+    dataset, is_npy_dataset = setup_dataset(data_dir)
     train_subset, test_subset = split_dataset_balanced(
-        train_dataset,
+        dataset,
         class_list=class_list,
         max_allowed_samples_per_class=max_allowed_samples_per_class,
         train_split=train_split,
         rng=rng,
         verbose=verbose,
     )
-    validate_subsets(train_subset, test_subset)
-
-    if test_data_dir is not None:
-        test_dataset, _ = setup_dataset(test_data_dir)
-        _, test_subset = split_dataset_balanced(
-            test_dataset,
-            class_list=class_list,
-            max_allowed_samples_per_class=max_allowed_samples_per_class,
-            train_split=train_split,
-            rng=rng,
-            verbose=verbose,
-        )
 
     if is_npy_dataset:
         return train_subset, test_subset
 
-    # Define the basic transformation for the test dataset
-    test_transform = transforms.ToTensor()
-    test_subset.dataset.transform = test_transform  # type: ignore
-
-    # set up augmentations (for train subset only)
-    sample, _ = train_subset.dataset[0]
-    if isinstance(sample, torch.Tensor):
-        # If the sample is already a tensor (e.g., from npy files)
-        img_shape = sample.shape
-    else:
-        # If the sample is a PIL image, convert it to a tensor first
-        sample_tensor = transforms.ToTensor()(sample)
-        img_shape = sample_tensor.shape
+    if test_subset is not None:
+        # Define the basic transformation for the test dataset
+        test_transform = transforms.ToTensor()
+        test_subset.dataset.transform = test_transform  # type: ignore
 
     # Define the data augmentation pipeline for the train dataset
     if use_augmentations:
+        # set up augmentations (for train subset only)
+        sample, _ = train_subset.dataset[0]
+        if isinstance(sample, torch.Tensor):
+            # If the sample is already a tensor (e.g., from npy files)
+            img_shape = sample.shape
+        else:
+            # If the sample is a PIL image, convert it to a tensor first
+            sample_tensor = transforms.ToTensor()(sample)
+            img_shape = sample_tensor.shape
+
         train_transform = transforms.Compose(
             [
                 transforms.RandomHorizontalFlip(),
@@ -190,16 +183,28 @@ def main(cfg):
 
     logger.info(cfg.classifier)
 
-    train_subset, test_subset = make_train_test_subsets(
+    train_subset, test_subset = make_balanced_subsets(
         class_list=cfg.classifier.class_list,
-        train_data_dir=cfg.classifier.train_data_dir,
-        test_data_dir=cfg.classifier.test_data_dir,
+        data_dir=cfg.classifier.train_data_dir,
         max_allowed_samples_per_class=cfg.classifier.max_allowed_samples_per_class,
         train_split=cfg.classifier.train_split,
         use_augmentations=cfg.classifier.use_augmentations,
         rng=rng,
         verbose=cfg.classifier.verbose,
     )
+
+    if cfg.classifier.test_data_dir is not None:
+        test_subset, _ = make_balanced_subsets(
+            class_list=cfg.classifier.class_list,
+            data_dir=cfg.classifier.test_data_dir,
+            max_allowed_samples_per_class=None,
+            train_split=1.0,
+            use_augmentations=False,
+            verbose=cfg.classifier.verbose,
+        )
+
+    if test_subset is None:
+        raise ValueError("Test subset is required")
 
     model_cls = getattr(classifier, cfg.classifier.model.name)
     model_kwargs = getattr(cfg.classifier.model, f"{cfg.classifier.model.name}_kwargs")
@@ -237,7 +242,7 @@ def main(cfg):
     )
 
     prop_train_schedule = np.linspace(1.0, 0.1, cfg.classifier.n_props_train)
-
+    # prop_train_schedule = np.array([0.5**i for i in range(cfg.classifier.n_props_train)])
     results_dict = experiment.run(
         prop_train_schedule=prop_train_schedule,  # type: ignore
         n_runs=cfg.classifier.n_runs,

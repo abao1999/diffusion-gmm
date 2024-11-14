@@ -220,10 +220,10 @@ class ClassifierExperiment:
         running_loss = 0.0
         for inputs, labels in dataloader:
             inputs, labels = (
-                inputs.to(self.device).float(),
-                labels.to(self.device).long()
+                inputs.to(self.device, non_blocking=True).float(),
+                labels.to(self.device, non_blocking=True).long()
                 if not self.use_binary_classifier
-                else labels.to(self.device).float(),
+                else labels.to(self.device, non_blocking=True).float(),
             )
             self.optimizer.zero_grad()
             outputs = self.model(inputs).squeeze()
@@ -246,10 +246,10 @@ class ClassifierExperiment:
         with torch.no_grad():
             for inputs, labels in dataloader:
                 inputs, labels = (
-                    inputs.to(self.device).float(),
-                    labels.to(self.device).long()
+                    inputs.to(self.device, non_blocking=True).float(),
+                    labels.to(self.device, non_blocking=True).long()
                     if not self.use_binary_classifier
-                    else labels.to(self.device).float(),
+                    else labels.to(self.device, non_blocking=True).float(),
                 )
                 outputs = self.model(inputs).squeeze()
                 loss = self.criterion(outputs, labels)
@@ -320,6 +320,8 @@ class ClassifierExperiment:
             batch_size=batch_size,
             shuffle=True,
             num_workers=num_workers,
+            pin_memory=True,
+            pin_memory_device=str(self.device),
         )
 
         return dataloader

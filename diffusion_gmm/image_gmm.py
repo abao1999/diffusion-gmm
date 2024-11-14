@@ -278,6 +278,9 @@ class ImageGMM(GaussianMixture):
         print("Generating samples...")
         samples = np.random.multivariate_normal(mean, covariance, size=n_samples)
 
+        # # transform samples to be in the range [0, 1]
+        # samples = (samples - samples.min()) / (samples.max() - samples.min())
+
         sample_shape = samples[0].shape
 
         assert (

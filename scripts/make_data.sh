@@ -1,21 +1,46 @@
+# # Set variable to main (parent) directory
+# main_dir=$(dirname "$(dirname "$0")")
+# data_dir=$WORK/vision_datasets
+# class_name="french_horn"
+# n_samples_fit=4096
+# n_samples_generate=4096
+# # dataset_name="imagenette64"
+# dataset_name="edm_imagenet64_big"
+
+# python scripts/sample_gmm.py \
+#         gmm.n_components=1 \
+#         gmm.data_dir=$data_dir/$dataset_name \
+#         gmm.covariance_type=full \
+#         gmm.batch_size=32 \
+#         gmm.target_class=$class_name \
+#         gmm.n_samples_fit=$n_samples_fit \
+#         gmm.n_samples_generate=$n_samples_generate \
+#         gmm.save_dir=$data_dir/gmm_$dataset_name/$class_name \
+
+
+
 # Set variable to main (parent) directory
 main_dir=$(dirname "$(dirname "$0")")
 data_dir=$WORK/vision_datasets
-class_name="french_horn"
 n_samples_fit=1024
-n_samples_generate=4096
-# dataset_name="imagenette64"
-dataset_name="edm_imagenet64_big"
+n_samples_generate=1024
+dataset_name="edm_imagenet64_big_test"
 
-python scripts/sample_gmm.py \
-        gmm.n_components=1 \
-        gmm.data_dir=$data_dir/$dataset_name \
-        gmm.covariance_type=full \
-        gmm.batch_size=32 \
-        gmm.target_class=$class_name \
-        gmm.n_samples_fit=$n_samples_fit \
-        gmm.n_samples_generate=$n_samples_generate \
-        gmm.save_dir=$data_dir/gmm_$dataset_name/$class_name \
+for class_name in "english_springer" "french_horn"; do
+    echo $class_name
+    echo $dataset_name
+    python scripts/sample_gmm.py \
+            gmm.n_components=1 \
+            gmm.data_dir=$data_dir/$dataset_name \
+            gmm.covariance_type=full \
+            gmm.batch_size=32 \
+            gmm.target_class=$class_name \
+            gmm.n_samples_fit=$n_samples_fit \
+            gmm.n_samples_generate=$n_samples_generate \
+            gmm.save_dir=$data_dir/gmm_${dataset_name}/$class_name
+done
+
+
 
 
 # # sample edm for imagenet class. NOTE: this is done in edm repo

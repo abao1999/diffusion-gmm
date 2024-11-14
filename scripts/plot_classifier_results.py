@@ -129,45 +129,46 @@ def plot_training_history(
     plt.close()
 
 
-def plot_accuracies(
-    results: Dict[str, List[List[Tuple[float, float, int]]]],
+def plot_quantity(
+    results: Dict[str, List[float]],
+    num_samples_schedule: Dict[str, List[int]],
     save_dir: str = "plots",
     save_name: str = "loss_accuracy.png",
     title: str = "Binary Linear Classifier",
+    label: str = "Accuracy",
 ) -> None:
     fig, ax1 = plt.subplots()
 
     os.makedirs(save_dir, exist_ok=True)
 
-    for run_name, accuracy_history in results.items():
-        accuracies = [[item[1] for item in x] for x in accuracy_history]
-        prop_train_schedule = [[item[0] for item in x] for x in accuracy_history]
-        n_runs = len(prop_train_schedule)
+    for run_name, quantity_history in results.items():
+        n_runs = len(quantity_history)
         assert n_runs == len(
-            accuracies
-        ), "Number of runs must match number of accuracies"
+            quantity_history
+        ), "Number of runs must match number of quantities"
         print("n_runs: ", n_runs)
 
-        mean_accuracies = np.mean(accuracies, axis=0)
+        mean_quantities = np.mean(quantity_history, axis=1)
+        num_samples = np.mean(num_samples_schedule[run_name], axis=1)
 
-        # Calculate standard deviation for accuracies
-        std_accuracies = np.std(accuracies, axis=0)
+        # Calculate standard deviation for quantities
+        std_quantities = np.std(quantity_history, axis=1)
 
         ax1.plot(
-            prop_train_schedule[0],
-            mean_accuracies,
+            num_samples,
+            mean_quantities,
             label=run_name,
             marker=".",
         )
         ax1.fill_between(
-            prop_train_schedule[0],
-            mean_accuracies - std_accuracies,
-            mean_accuracies + std_accuracies,
+            num_samples,
+            mean_quantities - std_quantities,
+            mean_quantities + std_quantities,
             alpha=0.1,
         )
 
-    ax1.set_xlabel("Proportion of Training Data")
-    ax1.set_ylabel("Accuracy")
+    ax1.set_xlabel("Number of Training Samples")
+    ax1.set_ylabel(label)
     ax1.legend()
     plt.title(title)
     plt.savefig(os.path.join(save_dir, save_name), dpi=300)
@@ -178,23 +179,38 @@ def plot_accuracies(
 
 def plot_results(run_json_paths: Dict[str, str], title: str) -> None:
     accuracies = {}
+    test_losses = {}
+    num_samples_schedule = {}
     for run_name, json_path in run_json_paths.items():
         with open(json_path, "r") as f:
             results_dict = json.load(f)
         accuracies[run_name] = results_dict["accuracies"]
-        plot_training_history(
-            train_loss_history_all_runs=results_dict["train_losses"],
-            test_loss_history_all_runs=results_dict["test_losses"],
-            accuracy_history_all_runs=results_dict["accuracies"],
-            save_name=f"loss_accuracy_{run_name}.png",
-            title=title,
-            save_dir="plots",
-        )
+        test_losses[run_name] = results_dict["test_losses"]
+        num_samples_schedule[run_name] = results_dict["num_train_samples"]
+        # plot_training_history(
+        #     train_loss_history_all_runs=results_dict["train_losses"],
+        #     test_loss_history_all_runs=results_dict["test_losses"],
+        #     accuracy_history_all_runs=results_dict["accuracies"],
+        #     save_name=f"loss_accuracy_{run_name}.png",
+        #     title=title,
+        #     save_dir="plots",
+        # )
 
-    plot_accuracies(
-        accuracies,
+    plot_quantity(
+        results=accuracies,
+        num_samples_schedule=num_samples_schedule,
         save_name="accuracies.png",
         title=title,
+        label="Accuracy",
+        save_dir="plots",
+    )
+
+    plot_quantity(
+        results=test_losses,
+        num_samples_schedule=num_samples_schedule,
+        save_name="test_losses.png",
+        title=title,
+        label="Test Loss",
         save_dir="plots",
     )
 
@@ -214,9 +230,9 @@ if __name__ == "__main__":
     #     "gmm": "gmm_imagenet64_english-springer_church",
     # }
     run_names_dict = {
-        "real": "imagenette64_english-springer_french-horn",
-        "diffusion": "edm_imagenet64_english-springer_french-horn",
-        "gmm": "gmm_imagenet64_english-springer_french-horn",
+        # "real": "imagenette64_english-springer_french-horn",
+        "diffusion": "edm_imagenet64_big_bs64_MSELoss_english-springer_french-horn_run1",
+        "gmm": "gmm_edm_imagenet64_big_bs64_MSELoss_english-springer_french-horn_run1",
     }
 
     json_dir = f"results/classifier/{model_name}"
