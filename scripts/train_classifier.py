@@ -241,7 +241,7 @@ def main(cfg):
         verbose=cfg.classifier.verbose,
     )
 
-    prop_train_schedule = np.linspace(1.0, 0.1, cfg.classifier.n_props_train)
+    prop_train_schedule = np.linspace(1.0, 0.05, cfg.classifier.n_props_train)
     # prop_train_schedule = np.array([0.5**i for i in range(cfg.classifier.n_props_train)])
     results_dict = experiment.run(
         prop_train_schedule=prop_train_schedule,  # type: ignore
@@ -255,7 +255,7 @@ def main(cfg):
     print(results_dict)
     save_dir = os.path.join(cfg.classifier.save_dir, cfg.classifier.model.name)
     os.makedirs(save_dir, exist_ok=True)
-    save_name = f"{cfg.classifier.save_name}_results.json"
+    save_name = f"{cfg.classifier.save_name}.json"
     results_file_path = os.path.join(save_dir, save_name)
 
     with open(results_file_path, "w") as results_file:

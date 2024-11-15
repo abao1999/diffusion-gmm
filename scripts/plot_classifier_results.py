@@ -231,8 +231,8 @@ if __name__ == "__main__":
     # }
     run_names_dict = {
         # "real": "imagenette64_english-springer_french-horn",
-        "diffusion": "edm_imagenet64_big_bs64_MSELoss_english-springer_french-horn_run1",
-        "gmm": "gmm_edm_imagenet64_big_bs64_MSELoss_english-springer_french-horn_run1",
+        "diffusion": "edm_imagenet64_big_bs64_MSELoss_english-springer_french-horn",
+        "gmm": "gmm_edm_imagenet64_big_bs64_MSELoss_english-springer_french-horn",
     }
 
     json_dir = f"results/classifier/{model_name}"

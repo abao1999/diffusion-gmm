@@ -1,5 +1,6 @@
 import json
 import logging
+import warnings
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Type, Union
 
@@ -11,6 +12,7 @@ from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader, Dataset, Subset
 from tqdm.auto import tqdm
 
+from diffusion_gmm.base import DataPrefetcher
 from diffusion_gmm.utils import get_targets
 
 logger = logging.getLogger(__name__)
@@ -212,13 +214,17 @@ class ClassifierExperiment:
         else:
             self.scheduler = None
 
-    def train(self, dataloader: DataLoader) -> float:
+    def train(self, dataloader: DataLoader | DataPrefetcher) -> float:
         """
         Train the model for one epoch
         """
         self.model.train()
         running_loss = 0.0
         for inputs, labels in dataloader:
+            if inputs is None or labels is None:
+                warnings.warn("Inputs or labels are None")
+                logger.warning("Inputs or labels are None")
+                continue
             inputs, labels = (
                 inputs.to(self.device, non_blocking=True).float(),
                 labels.to(self.device, non_blocking=True).long()
@@ -236,7 +242,7 @@ class ClassifierExperiment:
         return avg_loss
 
     @torch.no_grad()
-    def evaluate(self, dataloader: DataLoader) -> Tuple[float, float]:
+    def evaluate(self, dataloader: DataLoader | DataPrefetcher) -> Tuple[float, float]:
         """
         Evaluate the model on the test set and return the average loss and accuracy
         """
@@ -245,6 +251,10 @@ class ClassifierExperiment:
         correct = 0
         with torch.no_grad():
             for inputs, labels in dataloader:
+                if inputs is None or labels is None:
+                    warnings.warn("Inputs or labels are None")
+                    logger.warning("Inputs or labels are None")
+                    continue
                 inputs, labels = (
                     inputs.to(self.device, non_blocking=True).float(),
                     labels.to(self.device, non_blocking=True).long()
@@ -273,7 +283,8 @@ class ClassifierExperiment:
         shuffle: bool = True,
         batch_size: int = 64,
         num_workers: int = 4,
-    ) -> DataLoader:
+        make_prefetcher: bool = True,
+    ) -> DataLoader | DataPrefetcher:
         dataset = subset.dataset
         class_to_idx = dataset.class_to_idx  # type: ignore
         # Map class indices to user-specified multi-class classification labels
@@ -322,7 +333,10 @@ class ClassifierExperiment:
             num_workers=num_workers,
             pin_memory=True,
             pin_memory_device=str(self.device),
+            persistent_workers=True,
         )
+        if make_prefetcher:
+            dataloader = DataPrefetcher(dataloader, self.device)
 
         return dataloader
 
@@ -355,7 +369,11 @@ class ClassifierExperiment:
         n_props_train = len(prop_train_schedule)
 
         test_loader = self._build_dataloader(
-            self.test_subset, batch_size=batch_size, shuffle=False
+            self.test_subset,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=4,
+            make_prefetcher=True,
         )
 
         rng_stream = self.rng.spawn(n_runs)
@@ -393,6 +411,8 @@ class ClassifierExperiment:
                     batch_size=batch_size,
                     rng=rng,
                     shuffle=True,
+                    num_workers=4,
+                    make_prefetcher=True,
                 )
 
                 if verbose:

@@ -3,8 +3,8 @@ main_dir=$(dirname "$(dirname "$0")")
 data_dir=$WORK/vision_datasets
 
 train_split=1.0 # using separate folder for test set
-n_runs=5
-n_props_train=4
+n_runs=10
+n_props_train=6
 reset_model_random_seed=true
 save_dir=results/classifier
 num_epochs=400
@@ -18,15 +18,17 @@ criterion=MSELoss
 optimizer_class=SGD
 # scheduler_class=null
 scheduler_class=CosineAnnealingLR
-rseed=99
+rseed=123
 use_augmentations=false
-verbose=false
+verbose=true
 
 # dataset_list=("edm_imagenet64" "gmm_imagenet64" "imagenette64")
-dataset_list=("edm_imagenet64_big" "gmm_edm_imagenet64_big") # gmm_edm_imagenet64_big
+dataset_list=("gmm_edm_imagenet64_big" "edm_imagenet64_big") # edm_imagenet64_big
 for i in "${!dataset_list[@]}"; do
     dataset=${dataset_list[i]}
-    test_dataset=${dataset}_test
+    # test_dataset=${dataset}_test
+    # test_dataset=edm_imagenet64_big_test
+    test_dataset=imagenette64
     device_idx=6
     echo $dataset
     echo $test_dataset
