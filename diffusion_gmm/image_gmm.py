@@ -1,3 +1,4 @@
+import logging
 import os
 import warnings
 from dataclasses import dataclass
@@ -10,6 +11,8 @@ from torch.utils.data import DataLoader, SubsetRandomSampler
 from torchvision import datasets
 from torchvision.datasets import ImageFolder, VisionDataset
 from tqdm.auto import tqdm
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -25,7 +28,6 @@ class ImageGMM(GaussianMixture):
             'tied': all components share the same general covariance matrix.
             'diag': each component has its own diagonal covariance matrix.
             'spherical': each component has its own single variance.
-        batch_size: batch size fo dataloader (loading images)
         custom_transform: (Optional) A custom transform to apply to the data.
 
     ----------------------------------------------------------------
@@ -82,7 +84,6 @@ class ImageGMM(GaussianMixture):
     data_dir: str
     dataset_name: Optional[str] = None
     covariance_type: str = "full"
-    batch_size: int = 32
     custom_transform: Optional[transforms.Compose] = None
     verbose: bool = False
     rseed: int = 99
@@ -132,7 +133,7 @@ class ImageGMM(GaussianMixture):
     def _get_sample_shape(self) -> Tuple[int, int, int]:
         first_sample = next(iter(DataLoader(self.data)))[0].squeeze()
         shape = tuple(first_sample.shape)
-        print("Image shape: ", shape)
+        logger.info(f"Image shape: {shape}")
         assert len(shape) == 3, "Images should have 3 dimensions (C, H, W)"
         if not shape[0] == 3:
             warnings.warn(
@@ -141,7 +142,11 @@ class ImageGMM(GaussianMixture):
         return shape
 
     def _build_dataloader(
-        self, num_samples: int, target_class: Optional[str] = None, num_workers: int = 4
+        self,
+        num_samples: int,
+        target_class: Optional[str] = None,
+        num_workers: int = 4,
+        batch_size: int = 64,
     ) -> DataLoader:
         num_tot_samples = len(self.data)
         if target_class is None:
@@ -174,26 +179,32 @@ class ImageGMM(GaussianMixture):
                     indices.append(idx)
 
         if self.verbose:
-            print(f"Sampling from {len(indices)} valid samples")
+            logger.info(f"Sampling from {len(indices)} valid samples")
 
         custom_sampler = SubsetRandomSampler(indices)
         dataloader = DataLoader(
             self.data,
-            batch_size=self.batch_size,
+            batch_size=batch_size,
             shuffle=False,
             sampler=custom_sampler,
             num_workers=num_workers,
+            pin_memory=True,
+            persistent_workers=True,
         )
         return dataloader
 
-    def fit(self, num_samples: int, target_class: Optional[str] = None) -> None:
+    def fit(
+        self, num_samples: int, target_class: Optional[str] = None, batch_size: int = 64
+    ) -> None:
         """
         Fit a Gaussian Mixture Model (GMM) to the image data, after a data processing step to flatten the images
         """
-        dataloader = self._build_dataloader(num_samples, target_class)
+        dataloader = self._build_dataloader(
+            num_samples, target_class, batch_size=batch_size
+        )
         all_images = np.concatenate([images.numpy() for images, _ in tqdm(dataloader)])
         all_images = all_images.reshape(-1, np.prod(self.img_shape))
-        print("Fitting GMM to ", all_images.shape, " samples")
+        logger.info(f"Fitting GMM to {all_images.shape} samples")
         super().fit(all_images)
 
     def save_samples(
@@ -214,11 +225,12 @@ class ImageGMM(GaussianMixture):
 
         samples = samples.reshape(-1, *self.img_shape)
         if self.verbose:
-            print("Samples shape: ", samples.shape)
-            print(f"Saving {n_samples} samples from the fitted GMM to {save_dir}...")
+            logger.info(f"Samples shape: {samples.shape}")
+            logger.info(
+                f"Saving {n_samples} samples from the fitted GMM to {save_dir}..."
+            )
 
         os.makedirs(save_dir, exist_ok=True)
-        print("Saving samples to ", save_dir)
 
         for i, img in enumerate(samples):
             save_path = os.path.join(save_dir, f"sample_{i}.npy")
@@ -231,12 +243,15 @@ class ImageGMM(GaussianMixture):
         self,
         num_samples: int,
         target_class: Optional[str] = None,
+        batch_size: int = 64,
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Compute the mean and covariance matrix from the dataset by flattening the images from the dataloader
         """
         all_pixels = []
-        dataloader = self._build_dataloader(num_samples, target_class)
+        dataloader = self._build_dataloader(
+            num_samples, target_class, batch_size=batch_size
+        )
         # Accumulate all image pixel values
         for idx, (images, _) in tqdm(enumerate(dataloader)):
             # Flatten images to 2D: (number of images, number of pixels per image)
@@ -259,6 +274,7 @@ class ImageGMM(GaussianMixture):
         covariance: np.ndarray,
         n_samples: int,
         save_dir: str,
+        batch_size: Optional[int] = None,
     ) -> np.ndarray:
         """
         Generate samples from a single class by simply creating synthetic Gaussian data with same mean and covariance as images in that class
@@ -268,18 +284,29 @@ class ImageGMM(GaussianMixture):
             covariance: Covariance matrix of the Gaussian distribution
             n_samples: Number of samples to generate
             save_dir: Directory to save the samples after converting to images
-            plot_kwargs: Keyword arguments for saving and plotting the images
+            batch_size: Batch size for generating samples.
+                NOTE: recommended to set to None because vectorized op is faster and the overhead of multiple calls to np.random.multivariate_normal is expensive
         Returns:
             samples: Generated samples from the fitted GMM
         """
 
-        print("mean shape: ", mean.shape)
-        print("covariance shape: ", covariance.shape)
-        print("Generating samples...")
-        samples = np.random.multivariate_normal(mean, covariance, size=n_samples)
+        logger.info(f"mean shape: {mean.shape}")
+        logger.info(f"covariance shape: {covariance.shape}")
 
-        # # transform samples to be in the range [0, 1]
-        # samples = (samples - samples.min()) / (samples.max() - samples.min())
+        if batch_size is not None:
+            num_batches = n_samples // batch_size + (n_samples % batch_size > 0)
+            logger.info(f"Generating {n_samples} samples in {num_batches} batches")
+
+            # pre-allocate memory for samples
+            samples = np.empty((n_samples, mean.shape[0]))
+            for batch_idx in tqdm(range(num_batches), desc="Generating samples"):
+                current_batch_size = min(batch_size, n_samples - batch_idx * batch_size)
+                i = batch_idx * batch_size
+                samples[i : i + current_batch_size] = self.rng.multivariate_normal(
+                    mean, covariance, size=current_batch_size
+                )
+        else:
+            samples = self.rng.multivariate_normal(mean, covariance, size=n_samples)
 
         sample_shape = samples[0].shape
 
@@ -288,13 +315,10 @@ class ImageGMM(GaussianMixture):
         ), "New shape does not match the sample shape"
 
         samples = samples.reshape(-1, *self.img_shape)
-
-        if self.verbose:
-            print("Samples shape: ", samples.shape)
-            print(f"Saving {n_samples} samples from the fitted GMM to {save_dir}...")
+        logger.info(f"Samples shape: {samples.shape}")
+        logger.info(f"Saving {n_samples} samples from the fitted GMM to {save_dir}...")
 
         os.makedirs(save_dir, exist_ok=True)
-        print("Saving samples to ", save_dir)
 
         for i, img in enumerate(samples):
             save_path = os.path.join(save_dir, f"sample_{i}.npy")

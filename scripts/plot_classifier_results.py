@@ -237,7 +237,7 @@ if __name__ == "__main__":
 
     json_dir = f"results/classifier/{model_name}"
     run_json_paths = {
-        name: os.path.join(json_dir, f"{run_names_dict[name]}_results.json")
+        name: os.path.join(json_dir, f"{run_names_dict[name]}.json")
         for name in run_names_dict
     }
     # plot_results(run_json_paths, title="Two Layer Classifier with 3 Classes")

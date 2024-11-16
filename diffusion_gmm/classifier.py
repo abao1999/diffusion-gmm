@@ -348,6 +348,7 @@ class ClassifierExperiment:
         num_epochs: int = 20,
         batch_size: int = 64,
         verbose: bool = False,
+        log_every_n_epochs: int = 50,
     ) -> Dict[str, List[List[Tuple[float, float, int]]]]:
         """
         Run the classifier experiment
@@ -438,7 +439,11 @@ class ClassifierExperiment:
                         }
                     if self.scheduler is not None:
                         self.scheduler.step()
-                    if verbose and (epoch + 1) % 50 == 0:
+
+                    should_log = verbose and (
+                        epoch % log_every_n_epochs == 0 or epoch == num_epochs - 1
+                    )
+                    if should_log:
                         logger.info(
                             "Epoch [%d/%d], Train Loss: %f, Test Loss: %f, Accuracy: %f%%",
                             epoch + 1,
