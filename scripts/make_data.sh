@@ -22,12 +22,13 @@
 # Set variable to main (parent) directory
 main_dir=$(dirname "$(dirname "$0")")
 data_dir=$WORK/vision_datasets
-n_samples_fit=4096
-n_samples_generate=1024
-split="test"
-dataset_name="edm_imagenet64_big"
+n_samples_fit=5120
+n_samples_generate=5120
+split=""
+dataset_name="edm_imagenet64_all"
 save_dataset_name="gmm_${dataset_name}${split:+_$split}"
 save_dir=$data_dir/$save_dataset_name
+rseed=999
 
 for class_name in "english_springer" "french_horn"; do
     read -p "Fit GMM on $n_samples_fit samples from '$dataset_name' class $class_name and save $n_samples_generate samples to '$save_dataset_name'? (y/n): " confirmation
@@ -44,7 +45,8 @@ for class_name in "english_springer" "french_horn"; do
             gmm.target_class=$class_name \
             gmm.n_samples_fit=$n_samples_fit \
             gmm.n_samples_generate=$n_samples_generate \
-            gmm.save_dir=$save_dir/$class_name
+            gmm.save_dir=$save_dir/$class_name \
+            rseed=$rseed
 done
 
 
