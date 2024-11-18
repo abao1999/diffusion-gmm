@@ -319,9 +319,8 @@ class ImageGMM(GaussianMixture):
         logger.info(f"Saving {n_samples} samples from the fitted GMM to {save_dir}...")
 
         os.makedirs(save_dir, exist_ok=True)
-
         for i, img in enumerate(samples):
-            save_path = os.path.join(save_dir, f"sample_{i}.npy")
+            save_path = os.path.join(save_dir, f"sample_{i:06d}.npy")
             np.save(save_path, img)
 
         return samples

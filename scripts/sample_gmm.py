@@ -7,6 +7,15 @@ from diffusion_gmm.image_gmm import ImageGMM
 
 @hydra.main(config_path="../config", config_name="config", version_base=None)
 def main(cfg):
+    cfg_dict = {**cfg.gmm, "rseed": cfg.rseed}
+    logger.info(f"cfg_dict: {cfg_dict}")
+
+    logger.info(
+        f"\nFitting GMM on {cfg.gmm.n_samples_fit} samples from {cfg.gmm.data_dir}.\n"
+        f"Class: {cfg.gmm.target_class}.\n"
+        f"Saving {cfg.gmm.n_samples_generate} samples to {cfg.gmm.save_dir}."
+    )
+
     gmm = ImageGMM(
         n_components=cfg.gmm.n_components,
         data_dir=cfg.gmm.data_dir,

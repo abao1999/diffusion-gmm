@@ -9,6 +9,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from omegaconf import OmegaConf
 from torch.optim import lr_scheduler
 from torch.utils.data import Subset
 from torchvision import transforms
@@ -176,12 +177,16 @@ def validate_subsets(train_subset: Subset, test_subset: Subset):
 
 @hydra.main(config_path="../config", config_name="config", version_base=None)
 def main(cfg):
+    # Convert the entire config to a dictionary
+    cfg_dict = OmegaConf.to_container(cfg.classifier, resolve=True)
+    cfg_dict["rseed"] = cfg.rseed  # type: ignore
+
+    logger.info(cfg_dict)
+
     # set torch, cuda, and cudnn seeds
     set_seed(cfg.rseed)
     # set numpy rng
     rng = np.random.default_rng(cfg.rseed)
-
-    logger.info(cfg.classifier)
 
     train_subset, test_subset = make_balanced_subsets(
         class_list=cfg.classifier.class_list,
@@ -189,7 +194,7 @@ def main(cfg):
         max_allowed_samples_per_class=cfg.classifier.max_allowed_samples_per_class,
         train_split=cfg.classifier.train_split,
         use_augmentations=cfg.classifier.use_augmentations,
-        rng=rng,
+        rng=None,  # rng
         verbose=cfg.classifier.verbose,
     )
 
@@ -197,7 +202,7 @@ def main(cfg):
         test_subset, _ = make_balanced_subsets(
             class_list=cfg.classifier.class_list,
             data_dir=cfg.classifier.test_data_dir,
-            max_allowed_samples_per_class=None,
+            max_allowed_samples_per_class=cfg.classifier.max_allowed_samples_per_class_test,
             train_split=1.0,
             use_augmentations=False,
             verbose=cfg.classifier.verbose,
@@ -253,13 +258,14 @@ def main(cfg):
     )
 
     print(results_dict)
+
     save_dir = os.path.join(cfg.classifier.save_dir, cfg.classifier.model.name)
     os.makedirs(save_dir, exist_ok=True)
     save_name = f"{cfg.classifier.save_name}.json"
     results_file_path = os.path.join(save_dir, save_name)
 
     with open(results_file_path, "w") as results_file:
-        json.dump(results_dict, results_file, indent=4)
+        json.dump({"results": results_dict, "config": cfg_dict}, results_file, indent=4)
 
 
 if __name__ == "__main__":
