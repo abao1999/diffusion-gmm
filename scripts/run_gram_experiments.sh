@@ -26,18 +26,18 @@ target_class="english_springer"
 #         experiment.save_dir=results/gram_spectrum \
 #         experiment.save_name=imagenet64_${target_class}_gmm_gram_spectrum.npy \
 
-# # compute gram spectrum for imagenet64 class diffusion samples
-# python scripts/compute_gram_spectrum.py \
-#         experiment.data_dir=$data_dir/edm_imagenet64 \
-#         experiment.batch_size=32 \
-#         experiment.target_class=$target_class \
-#         experiment.num_samples=$n_samples \
-#         experiment.save_dir=results/gram_spectrum \
-#         experiment.save_name=imagenet64_${target_class}_edm_gram_spectrum.npy \
+# compute gram spectrum for imagenet64 class diffusion samples
+python scripts/compute_gram_spectrum.py \
+        experiment.data_dir=$data_dir/edm_imagenet64_train \
+        experiment.batch_size=32 \
+        experiment.target_class=$target_class \
+        experiment.num_samples=$n_samples \
+        experiment.save_dir=results/gram_spectrum \
+        experiment.save_name=imagenet64_${target_class}_edm_gram_spectrum.npy \
 
 # compute gram spectrum for imagenet64 class gmm samples
 python scripts/compute_gram_spectrum.py \
-        experiment.data_dir=$data_dir/gmm_edm_imagenet64_big \
+        experiment.data_dir=$data_dir/gmm_edm_imagenet64_train \
         experiment.load_npy=true \
         experiment.batch_size=32 \
         experiment.target_class=$target_class \

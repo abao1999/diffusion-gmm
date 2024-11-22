@@ -9,10 +9,13 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.optim import lr_scheduler
-from torch.utils.data import DataLoader, Dataset, Subset
+from torch.utils.data import DataLoader, Subset
 from tqdm.auto import tqdm
 
-from diffusion_gmm.base import DataPrefetcher
+from diffusion_gmm.base import (
+    DataPrefetcher,
+    MultiClassSubset,
+)
 from diffusion_gmm.utils import get_targets
 
 logger = logging.getLogger(__name__)
@@ -118,27 +121,6 @@ class TwoLayerBinaryClassifier(nn.Module):
             return self.fc2(x)  # Return logits
         else:
             return self.sigmoid(self.fc2(x))  # Return probabilities
-
-
-class MultiClassSubset(Dataset):
-    """
-    Wrap a subset of a dataset to apply a mapping of targets (class labels) to
-    user-specified multi-class classification labels
-    """
-
-    def __init__(self, subset, class_to_index):
-        self.subset = subset
-        self.class_to_index = class_to_index
-
-    def __getitem__(self, index):
-        data, target = self.subset[index]
-        if target not in self.class_to_index:
-            raise ValueError(f"Target {target} not valid for multi-class subset")
-        label = self.class_to_index[target]
-        return data, label
-
-    def __len__(self):
-        return len(self.subset)
 
 
 @dataclass
@@ -278,11 +260,13 @@ class ClassifierExperiment:
     def _build_dataloader(
         self,
         subset: Subset,
+        batch_size: int = 64,
         prop_samples_to_use: float = 1.0,
         rng: Optional[np.random.Generator] = None,
         shuffle: bool = True,
-        batch_size: int = 64,
         num_workers: int = 4,
+        pin_memory: bool = True,
+        persistent_workers: bool = True,
         make_prefetcher: bool = True,
     ) -> DataLoader | DataPrefetcher:
         dataset = subset.dataset
@@ -316,24 +300,25 @@ class ClassifierExperiment:
                 selected_indices.extend(indices[:subset_size])
 
             selected_subset = MultiClassSubset(
-                Subset(dataset, selected_indices), class_idx_to_label
+                Subset(dataset, selected_indices),
+                class_idx_to_label,
             )
         else:
             selected_subset = MultiClassSubset(subset, class_idx_to_label)
 
         if self.verbose:
-            target_counts = np.bincount([label for _, label in selected_subset])
+            target_counts = np.bincount([label.item() for _, label in selected_subset])
             logger.info("Built dataloader with %d samples...", len(selected_subset))
             logger.info("Distribution of targets in subset: %s", target_counts)
 
         dataloader = DataLoader(
             selected_subset,
             batch_size=batch_size,
-            shuffle=True,
+            shuffle=shuffle,
             num_workers=num_workers,
-            pin_memory=True,
+            pin_memory=pin_memory,
             pin_memory_device=str(self.device),
-            persistent_workers=True,
+            persistent_workers=persistent_workers,
         )
         if make_prefetcher:
             dataloader = DataPrefetcher(dataloader, self.device)
@@ -347,6 +332,7 @@ class ClassifierExperiment:
         reset_model_random_seed: bool = False,
         num_epochs: int = 20,
         batch_size: int = 64,
+        dataloader_kwargs: Optional[Dict[str, Any]] = None,
         verbose: bool = False,
         log_every_n_epochs: int = 50,
     ) -> Dict[str, List[List[Tuple[float, float, int]]]]:
@@ -357,6 +343,7 @@ class ClassifierExperiment:
             train_indices: Indices to use for training
             test_subset_inds: Indices to use for testing
         """
+
         if verbose:
             logger.info(
                 "Running classifier experiment with %s classes...", self.class_list
@@ -372,9 +359,7 @@ class ClassifierExperiment:
         test_loader = self._build_dataloader(
             self.test_subset,
             batch_size=batch_size,
-            shuffle=False,
-            num_workers=4,
-            make_prefetcher=True,
+            **(dataloader_kwargs or {}),
         )
 
         rng_stream = self.rng.spawn(n_runs)
@@ -408,12 +393,10 @@ class ClassifierExperiment:
                 # build train dataloader
                 train_loader = self._build_dataloader(
                     self.train_subset,
-                    prop_samples_to_use=prop_train,
                     batch_size=batch_size,
+                    prop_samples_to_use=prop_train,
                     rng=rng,
-                    shuffle=True,
-                    num_workers=4,
-                    make_prefetcher=True,
+                    **(dataloader_kwargs or {}),
                 )
 
                 if verbose:

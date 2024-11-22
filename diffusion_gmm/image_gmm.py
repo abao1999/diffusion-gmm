@@ -2,15 +2,16 @@ import logging
 import os
 import warnings
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import numpy as np
-import torchvision.transforms as transforms
+import torch
 from sklearn.mixture import GaussianMixture
-from torch.utils.data import DataLoader, SubsetRandomSampler
-from torchvision import datasets
-from torchvision.datasets import ImageFolder, VisionDataset
+from torch.utils.data import DataLoader, Subset
+from torchvision.datasets import DatasetFolder
 from tqdm.auto import tqdm
+
+from diffusion_gmm.utils.data_utils import get_targets
 
 logger = logging.getLogger(__name__)
 
@@ -19,308 +20,167 @@ logger = logging.getLogger(__name__)
 class ImageGMM(GaussianMixture):
     """
     Gaussian Mixture Model (GMM) for image data
-    Args:
-        n_components: The number of mixture components.
-        data_dir: The path to the folder to be loaded as imagefolder.
-        dataset_name: (Optional) The name of the dataset, to use custom VisionDataset class for loading. For example, Imagenet or CIFAR10.
-        covariance_type: The type of covariance matrix to use.
-            'full': each component has its own general covariance matrix.
-            'tied': all components share the same general covariance matrix.
-            'diag': each component has its own diagonal covariance matrix.
-            'spherical': each component has its own single variance.
-        custom_transform: (Optional) A custom transform to apply to the data.
-
-    ----------------------------------------------------------------
-    Attributes:
-        From GaussianMixture:
-        weights_ : array-like of shape (n_components,)
-            The weights of each mixture components.
-
-        means_ : array-like of shape (n_components, n_features)
-            The mean of each mixture component.
-
-        covariances_ : array-like
-            The covariance of each mixture component.
-            The shape depends on `covariance_type`::
-
-                (n_components,)                        if 'spherical',
-                (n_features, n_features)               if 'tied',
-                (n_components, n_features)             if 'diag',
-                (n_components, n_features, n_features) if 'full'
-
-        precisions_ : array-like
-            The precision matrices for each component in the mixture. A precision
-            matrix is the inverse of a covariance matrix. A covariance matrix is
-            symmetric positive definite so the mixture of Gaussian can be
-            equivalently parameterized by the precision matrices. Storing the
-            precision matrices instead of the covariance matrices makes it more
-            efficient to compute the log-likelihood of new samples at test time.
-            The shape depends on `covariance_type` in the same way as `covariances_`.
-
-        precisions_cholesky_ : array-like
-            The cholesky decomposition of the precision matrices of each mixture
-            component.
-
-        converged_ : bool
-            True when convergence of the best fit of EM was reached, False otherwise.
-
-        n_iter_ : int
-            Number of step used by the best fit of EM to reach the convergence.
-
-        lower_bound_ : float
-            Lower bound value on the log-likelihood (of the training data with
-            respect to the model) of the best fit of EM.
-
-        n_features_in_ : int
-            Number of features seen during :term:`fit`.
-
-        feature_names_in_ : ndarray of shape (`n_features_in_`,)
-            Names of features seen during :term:`fit`. Defined only when `X`
-            has feature names that are all strings.
-
     """
 
     n_components: int
-    data_dir: str
-    dataset_name: Optional[str] = None
+    dataset: DatasetFolder
+    class_list: List[str]
     covariance_type: str = "full"
-    custom_transform: Optional[transforms.Compose] = None
     verbose: bool = False
     rseed: int = 99
 
     def __post_init__(self):
-        if not os.path.exists(self.data_dir):
-            raise FileNotFoundError(f"Data directory {self.data_dir} does not exist")
-
         super().__init__(n_components=self.n_components)
 
+        sample, _ = self.dataset[0]
+        if isinstance(sample, torch.Tensor):
+            self.img_shape = sample.shape
+        else:
+            raise ValueError("Sample is not a tensor")
+
         self.rng = np.random.default_rng(self.rseed)
-        if self.custom_transform is None:
-            self.custom_transform = transforms.Compose([transforms.ToTensor()])
-        self.data = self._get_dataset()
-        self.classes = self.data.classes  # type: ignore
-        self.class_to_idx: Dict[str, int] = self.data.class_to_idx  # type: ignore
-        self.idx_to_class: Dict[int, str] = {v: k for k, v in self.class_to_idx.items()}
-        self.img_shape = self._get_sample_shape()
 
-    def _get_dataset(self) -> VisionDataset:
-        if self.dataset_name is None:
-            data = ImageFolder(
-                root=self.data_dir,
-                transform=self.custom_transform,
-                target_transform=None,
-            )
-        elif self.dataset_name == "cifar10":
-            # Load the real CIFAR10 train split from torchvision
-            data = datasets.CIFAR10(
-                root=self.data_dir,
-                train=True,
-                download=True,
-                transform=self.custom_transform,
-            )
-        elif self.dataset_name == "imagenet":
-            data = datasets.ImageNet(
-                root=self.data_dir,
-                split="train",
-                download=True,
-                transform=self.custom_transform,
-            )
-        else:
-            raise ValueError(f"Dataset {self.dataset_name} not supported")
-
-        return data
-
-    def _get_sample_shape(self) -> Tuple[int, int, int]:
-        first_sample = next(iter(DataLoader(self.data)))[0].squeeze()
-        shape = tuple(first_sample.shape)
-        logger.info(f"Image shape: {shape}")
-        assert len(shape) == 3, "Images should have 3 dimensions (C, H, W)"
-        if not shape[0] == 3:
+        available_classes = self.dataset.classes
+        n_classes = len(self.class_list)
+        if n_classes != self.n_components:
             warnings.warn(
-                f"Images should have 3 color channels. Found {shape[0]} instead."
+                "Number of classes in class_list does not match number of components"
             )
-        return shape
+        if n_classes > len(available_classes):
+            raise ValueError(
+                "Number of classes in class_list is greater than number of classes in dataset"
+            )
 
-    def _build_dataloader(
-        self,
-        num_samples: int,
-        target_class: Optional[str] = None,
-        num_workers: int = 4,
-        batch_size: int = 64,
-    ) -> DataLoader:
-        num_tot_samples = len(self.data)
-        if target_class is None:
-            if num_samples > num_tot_samples:
-                indices = list(range(num_tot_samples))
-            else:
-                indices = self.rng.choice(
-                    num_tot_samples, num_samples, replace=False
-                ).tolist()
-        else:
-            # Convert target_class from string to integer index
-            target_class_idx = self.class_to_idx[target_class]
-
-            # For datasets like CIFAR10, use targets attribute
-            if hasattr(self.data, "targets"):
-                targets = self.data.targets  # type: ignore
-            # For ImageFolder, reconstruct targets from samples
-            elif hasattr(self.data, "samples"):
-                targets = [class_idx for _, class_idx in self.data.samples]  # type: ignore
-            else:
-                raise AttributeError(
-                    "Dataset doesn't have 'targets' or 'samples' attribute"
-                )
-
-            indices = []
-            for idx, class_idx in enumerate(targets):
-                if len(indices) == num_samples:
-                    break
-                if class_idx == target_class_idx:
-                    indices.append(idx)
-
-        if self.verbose:
-            logger.info(f"Sampling from {len(indices)} valid samples")
-
-        custom_sampler = SubsetRandomSampler(indices)
-        dataloader = DataLoader(
-            self.data,
-            batch_size=batch_size,
-            shuffle=False,
-            sampler=custom_sampler,
-            num_workers=num_workers,
-            pin_memory=True,
-            persistent_workers=True,
-        )
-        return dataloader
+        targets = get_targets(self.dataset)
+        class_to_idx = self.dataset.class_to_idx
+        self.class_to_indices = {
+            cls: np.where(targets == class_to_idx[cls])[0].tolist()
+            for cls in self.class_list
+        }
 
     def fit(
-        self, num_samples: int, target_class: Optional[str] = None, batch_size: int = 64
+        self,
+        num_samples_per_class: int,
+        use_dataloader: bool = False,
+        dataloader_kwargs: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
         Fit a Gaussian Mixture Model (GMM) to the image data, after a data processing step to flatten the images
         """
-        dataloader = self._build_dataloader(
-            num_samples, target_class, batch_size=batch_size
-        )
-        all_images = np.concatenate([images.numpy() for images, _ in tqdm(dataloader)])
+        selected_inds = []
+        for cls in self.class_list:
+            selected_inds.extend(self.class_to_indices[cls][:num_samples_per_class])
+
+        subset = Subset(self.dataset, selected_inds)
+
+        if use_dataloader:
+            dataloader = DataLoader(
+                subset,
+                **(dataloader_kwargs or {}),
+            )
+            all_images = np.concatenate(
+                [images.numpy() for images, _ in tqdm(dataloader)]
+            )
+        else:
+            all_images = np.concatenate(
+                [self.dataset[i][0].numpy() for i in selected_inds]
+            )
+
         all_images = all_images.reshape(-1, np.prod(self.img_shape))
-        logger.info(f"Fitting GMM to {all_images.shape} samples")
+        logger.info(f"Fitting GMM to samples of shape {all_images.shape}")
         super().fit(all_images)
+
+    def compute_mean_and_covariance(
+        self,
+        num_samples_per_class: int,
+    ) -> Dict[str, Dict[str, np.ndarray]]:
+        """
+        Compute the mean and covariance matrix from the dataset by flattening the images from the dataloader
+        """
+        class_stats = {}
+        for class_name in self.class_list:
+            class_stats[class_name] = {
+                "mean": None,
+                "covariance": None,
+            }
+            sel_inds = self.class_to_indices[class_name][:num_samples_per_class]
+            all_pixels = np.array(
+                [self.dataset[i][0].numpy().reshape(-1) for i in sel_inds]
+            )
+
+            class_stats[class_name]["mean"] = np.mean(all_pixels, axis=0)
+            class_stats[class_name]["covariance"] = np.cov(all_pixels, rowvar=False)
+
+        return class_stats
 
     def save_samples(
         self,
         n_samples: int,
         save_dir: str,
-    ) -> np.ndarray:
+    ) -> None:
         """
         Generate samples from the fitted GMM and save them as images with self.img_shape
         """
         os.makedirs(save_dir, exist_ok=True)
         # NOTE: this also returns component_labels
         samples, _ = super().sample(n_samples)
-        _, n_features = samples.shape
         assert (
-            np.prod(self.img_shape) == n_features
+            np.prod(self.img_shape) == samples.shape[1]
         ), "Mismatch between the number of features and the image shape"
 
         samples = samples.reshape(-1, *self.img_shape)
         if self.verbose:
-            logger.info(f"Samples shape: {samples.shape}")
             logger.info(
-                f"Saving {n_samples} samples from the fitted GMM to {save_dir}..."
+                f"Saving {n_samples} samples, shape {samples.shape}, from the fitted GMM to {save_dir}..."
             )
 
-        os.makedirs(save_dir, exist_ok=True)
+        # Save samples in batches
+        batch_size = 128
+        for start_idx in range(0, n_samples, batch_size):
+            end_idx = min(start_idx + batch_size, n_samples)
+            batch_samples = samples[start_idx:end_idx]
+            save_path = os.path.join(save_dir, f"batch_{start_idx:06d}.npz")
+            np.savez(save_path, *batch_samples)
 
-        for i, img in enumerate(samples):
-            save_path = os.path.join(save_dir, f"sample_{i}.npy")
-            np.save(save_path, img)
-
-        return samples
-
-    # Function to compute mean and covariance matrix from dataset
-    def compute_mean_and_covariance(
+    def sample_from_computed_stats(
         self,
-        num_samples: int,
-        target_class: Optional[str] = None,
-        batch_size: int = 64,
-    ) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        Compute the mean and covariance matrix from the dataset by flattening the images from the dataloader
-        """
-        all_pixels = []
-        dataloader = self._build_dataloader(
-            num_samples, target_class, batch_size=batch_size
-        )
-        # Accumulate all image pixel values
-        for idx, (images, _) in tqdm(enumerate(dataloader)):
-            # Flatten images to 2D: (number of images, number of pixels per image)
-            flattened_images = images.view(images.size(0), -1).numpy()
-            all_pixels.append(flattened_images)
-
-        # Concatenate all pixel values
-        all_pixels = np.concatenate(all_pixels, axis=0)
-
-        # Compute the mean and covariance
-        mean = np.mean(all_pixels, axis=0)
-        # get the pixel-wise covariance matrix
-        covariance = np.cov(all_pixels, rowvar=False)
-
-        return mean, covariance
-
-    def save_samples_single_class(
-        self,
-        mean: np.ndarray,
-        covariance: np.ndarray,
-        n_samples: int,
+        class_stats: Dict[str, Dict[str, np.ndarray]],
+        n_samples_per_class: int,
         save_dir: str,
-        batch_size: Optional[int] = None,
-    ) -> np.ndarray:
+    ) -> None:
         """
-        Generate samples from a single class by simply creating synthetic Gaussian data with same mean and covariance as images in that class
-        Saves samples as images with self.img_shape
-        Args:
-            mean: Mean of the Gaussian distribution
-            covariance: Covariance matrix of the Gaussian distribution
-            n_samples: Number of samples to generate
-            save_dir: Directory to save the samples after converting to images
-            batch_size: Batch size for generating samples.
-                NOTE: recommended to set to None because vectorized op is faster and the overhead of multiple calls to np.random.multivariate_normal is expensive
-        Returns:
-            samples: Generated samples from the fitted GMM
+        Generate Gaussian samples with the computed mean and covariance matrices and save them as images with self.img_shape
         """
+        if not set(class_stats.keys()).issubset(self.class_list):
+            raise ValueError(
+                "Class list in class_stats is not a subset of the class list"
+            )
+        for class_name in self.class_list:
+            mean = class_stats[class_name]["mean"]
+            covariance = class_stats[class_name]["covariance"]
+            samples = self.rng.multivariate_normal(
+                mean, covariance, size=n_samples_per_class
+            )
 
-        logger.info(f"mean shape: {mean.shape}")
-        logger.info(f"covariance shape: {covariance.shape}")
+            assert (
+                np.prod(self.img_shape) == samples[0].shape
+            ), "New shape does not match the sample shape"
 
-        if batch_size is not None:
-            num_batches = n_samples // batch_size + (n_samples % batch_size > 0)
-            logger.info(f"Generating {n_samples} samples in {num_batches} batches")
+            samples = samples.reshape(-1, *self.img_shape)
+            logger.info(
+                f"Saving {n_samples_per_class} samples, shape {samples.shape}, computed from class statistics, to {save_dir}..."
+            )
+            class_save_dir = os.path.join(save_dir, class_name)
+            os.makedirs(class_save_dir, exist_ok=True)
 
-            # pre-allocate memory for samples
-            samples = np.empty((n_samples, mean.shape[0]))
-            for batch_idx in tqdm(range(num_batches), desc="Generating samples"):
-                current_batch_size = min(batch_size, n_samples - batch_idx * batch_size)
-                i = batch_idx * batch_size
-                samples[i : i + current_batch_size] = self.rng.multivariate_normal(
-                    mean, covariance, size=current_batch_size
-                )
-        else:
-            samples = self.rng.multivariate_normal(mean, covariance, size=n_samples)
-
-        sample_shape = samples[0].shape
-
-        assert (
-            np.prod(self.img_shape) == sample_shape
-        ), "New shape does not match the sample shape"
-
-        samples = samples.reshape(-1, *self.img_shape)
-        logger.info(f"Samples shape: {samples.shape}")
-        logger.info(f"Saving {n_samples} samples from the fitted GMM to {save_dir}...")
-
-        os.makedirs(save_dir, exist_ok=True)
-        for i, img in enumerate(samples):
-            save_path = os.path.join(save_dir, f"sample_{i:06d}.npy")
-            np.save(save_path, img)
-
-        return samples
+            # Save samples in batches
+            batch_size = 128
+            for start_idx in range(0, n_samples_per_class, batch_size):
+                end_idx = min(start_idx + batch_size, n_samples_per_class)
+                batch_samples = samples[start_idx:end_idx]
+                batch_save_paths = [
+                    os.path.join(class_save_dir, f"sample_{i:06d}.npy")
+                    for i in range(start_idx, end_idx)
+                ]
+                for img, save_path in zip(batch_samples, batch_save_paths):
+                    np.save(save_path, img)

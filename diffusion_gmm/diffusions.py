@@ -14,8 +14,6 @@ from tqdm.auto import tqdm
 
 from diffusion_gmm.utils import save_and_plot_samples
 
-# TODO: make class for diffusion models
-
 
 def generate_ddpm_exposed(
     model_id: str = "google/ddpm-cifar10-32",

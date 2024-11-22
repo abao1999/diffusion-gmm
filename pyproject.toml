@@ -19,7 +19,7 @@ dependencies = ["numpy", "torch", "torchvision", "diffusers", "scipy", "scikit-l
 # Optional dependencies
 [project.optional-dependencies]
 tests = ["matplotlib"]
-
+rocm = ["torch==2.2.2"]
 # Package data
 [tool.setuptools]
-packages = ["diffusion_gmm"]
+packages = ["diffusion_gmm", "diffusion_gmm.utils"]

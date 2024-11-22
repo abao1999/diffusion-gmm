@@ -1,43 +1,9 @@
 import os
 import warnings
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, Optional, Tuple
 
 import numpy as np
-import torch
 from PIL import Image
-from torchvision.datasets import DatasetFolder
-
-
-def set_seed(rseed: int):
-    """
-    Set the seed for the random number generator for torch, cuda, and cudnn
-    """
-    print(torch.cuda.is_available())
-    print(torch.cuda.device_count())
-    print(torch.cuda.current_device())
-    print(torch.cuda.get_device_name(0))
-
-    torch.manual_seed(rseed)
-    # If using CUDA, you should also set the seed for CUDA for full reproducibility
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed(rseed)
-        torch.cuda.manual_seed_all(rseed)  # if you have multiple GPUs
-
-    # For deterministic behavior on GPU (reproducibility), use the following:
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-
-
-def get_targets(dataset: DatasetFolder) -> List[int]:
-    # For datasets like CIFAR10, use targets attribute
-    if hasattr(dataset, "targets"):
-        targets = dataset.targets  # type: ignore
-    # For ImageFolder, reconstruct targets from samples
-    elif hasattr(dataset, "samples"):
-        targets = [class_idx for _, class_idx in dataset.samples]  # type: ignore
-    else:
-        raise AttributeError("Dataset doesn't have 'targets' or 'samples' attribute")
-    return targets
 
 
 def save_images_grid(
@@ -165,23 +131,3 @@ def save_and_plot_samples(
         for i, img in enumerate(samples):
             save_path = os.path.join(save_dir, f"sample_{i}.npy")
             np.save(save_path, img)
-
-
-def default_image_processing_fn(
-    samples: np.ndarray, verbose: bool = True
-) -> np.ndarray:
-    """
-    Default processing function for samples
-    """
-    if isinstance(samples, torch.Tensor):
-        samples = samples.cpu().numpy()
-
-    min_val, max_val = samples.min(), samples.max()
-    if verbose:
-        print("min_val, max_val: ", min_val, max_val)
-    samples = np.clip(samples, min_val, max_val)
-    samples = ((samples - min_val) / (max_val - min_val)) * 255
-    samples = samples.astype(np.uint8)
-    # samples = torch.clamp(samples, min_val, max_val)
-    # samples = samples.to(torch.uint8)
-    return samples

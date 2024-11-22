@@ -14,6 +14,8 @@ tests/figs/
 *.out
 *.npy
 *.npz
+*.json
+*_debug.py
 nohup.out
 
 # output and logging files

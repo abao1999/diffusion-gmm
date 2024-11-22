@@ -181,20 +181,27 @@ def plot_results(run_json_paths: Dict[str, str], title: str) -> None:
     accuracies = {}
     test_losses = {}
     num_samples_schedule = {}
-    for run_name, json_path in run_json_paths.items():
-        with open(json_path, "r") as f:
-            results_dict = json.load(f)
-        accuracies[run_name] = results_dict["accuracies"]
-        test_losses[run_name] = results_dict["test_losses"]
-        num_samples_schedule[run_name] = results_dict["num_train_samples"]
-        # plot_training_history(
-        #     train_loss_history_all_runs=results_dict["train_losses"],
-        #     test_loss_history_all_runs=results_dict["test_losses"],
-        #     accuracy_history_all_runs=results_dict["accuracies"],
-        #     save_name=f"loss_accuracy_{run_name}.png",
-        #     title=title,
-        #     save_dir="plots",
-        # )
+    for run_name, json_paths_lst in run_json_paths.items():
+        print(f"Processing {run_name}")
+        print(json_paths_lst)
+        run_accuracies = []
+        run_test_losses = []
+        run_num_samples_schedule = []
+        for json_path in json_paths_lst:
+            print(f"Processing {json_path}")
+            with open(json_path, "r") as f:
+                results_dict = json.load(f)["results"]
+            run_accuracies.append(results_dict["accuracies"])
+            run_test_losses.append(results_dict["test_losses"])
+            run_num_samples_schedule.append(results_dict["num_train_samples"])
+        accuracies[run_name] = np.concatenate(run_accuracies, axis=1)
+        test_losses[run_name] = np.concatenate(run_test_losses, axis=1)
+        num_samples_schedule[run_name] = np.concatenate(
+            run_num_samples_schedule, axis=1
+        )
+        # accuracies[run_name] = np.mean(run_accuracies, axis=0)
+        # test_losses[run_name] = np.mean(run_test_losses, axis=0)
+        # num_samples_schedule[run_name] = np.mean(run_num_samples_schedule, axis=0)
 
     plot_quantity(
         results=accuracies,
@@ -216,28 +223,26 @@ def plot_results(run_json_paths: Dict[str, str], title: str) -> None:
 
 
 if __name__ == "__main__":
-    # model_name = "TwoLayerMulticlassClassifier"
-    # run_names_dict = {
-    #     "real": "imagenette64_english-springer_french-horn_church",
-    #     "diffusion": "edm_imagenet64_english-springer_french-horn_church",
-    #     "gmm": "gmm_imagenet64_english-springer_french-horn_church",
-    # }
-
     model_name = "LinearBinaryClassifier"
-    # run_names_dict = {
-    #     "real": "imagenette64_english-springer_church",
-    #     "diffusion": "edm_imagenet64_english-springer_church",
-    #     "gmm": "gmm_imagenet64_english-springer_church",
-    # }
     run_names_dict = {
         # "real": "imagenette64_english-springer_french-horn",
-        "diffusion": "edm_imagenet64_big_bs64_MSELoss_english-springer_french-horn",
-        "gmm": "gmm_edm_imagenet64_big_bs64_MSELoss_english-springer_french-horn",
+        "diffusion": [
+            f"edm_imagenet64_bs64_MSELoss_english-springer_french-horn_run{idx}"
+            for idx in range(3, 5)
+        ],
+        "gmm": [
+            f"gmm_edm_imagenet64_bs64_MSELoss_english-springer_french-horn_run{idx}"
+            for idx in range(3, 5)
+        ],
     }
 
-    json_dir = f"results/classifier/{model_name}"
+    # json_dir = f"results/classifier/{model_name}"
+    json_dir = "results/classifier/backup"
     run_json_paths = {
-        name: os.path.join(json_dir, f"{run_names_dict[name]}.json")
+        name: [
+            os.path.join(json_dir, f"{run_name}.json")
+            for run_name in run_names_dict[name]
+        ]
         for name in run_names_dict
     }
     # plot_results(run_json_paths, title="Two Layer Classifier with 3 Classes")

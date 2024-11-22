@@ -70,3 +70,9 @@ classifier:
       T_mult: 1
       eta_min: 1e-4
 
+  dataloader_kwargs:
+    shuffle: true
+    num_workers: 12
+    persistent_workers: true
+    pin_memory: true
+    make_prefetcher: true

@@ -1,8 +1,10 @@
 import logging
 
 import hydra
+import torchvision.transforms as transforms
 
 from diffusion_gmm.image_gmm import ImageGMM
+from diffusion_gmm.utils.data_utils import setup_dataset
 
 
 @hydra.main(config_path="../config", config_name="config", version_base=None)
@@ -12,46 +14,35 @@ def main(cfg):
 
     logger.info(
         f"\nFitting GMM on {cfg.gmm.n_samples_fit} samples from {cfg.gmm.data_dir}.\n"
-        f"Class: {cfg.gmm.target_class}.\n"
+        f"Class list: {cfg.gmm.class_list}.\n"
         f"Saving {cfg.gmm.n_samples_generate} samples to {cfg.gmm.save_dir}."
     )
 
+    dataset, is_npy_dataset = setup_dataset(
+        cfg.gmm.data_dir, dataset_name=cfg.gmm.dataset_name
+    )
+    dataset.transform = transforms.ToTensor() if not is_npy_dataset else None
+    logger.info(f"dataset: {dataset}")
+
     gmm = ImageGMM(
         n_components=cfg.gmm.n_components,
-        data_dir=cfg.gmm.data_dir,
-        dataset_name=cfg.gmm.dataset_name,
+        dataset=cfg.gmm.dataset,
+        class_list=cfg.gmm.class_list,
         covariance_type=cfg.gmm.covariance_type,
-        custom_transform=cfg.gmm.custom_transform,
         verbose=True,
         rseed=cfg.rseed,
     )
 
-    # gmm.fit(
-    #     cfg.gmm.n_samples_fit,
-    #     target_class=cfg.gmm.target_class,
-    #     batch_size=cfg.gmm.batch_size,
-    # )
+    # gmm.fit(cfg.gmm.n_samples_fit)
+    # gmm.save_samples(n_samples=cfg.gmm.n_samples_generate, save_dir=cfg.gmm.save_dir)
 
-    # gmm.save_samples(
-    #     n_samples=cfg.gmm.n_samples_generate,
-    #     save_dir=cfg.gmm.save_dir,
-    # )
-
-    # # means = gmm.means_
-    # print("means.shape: ", means.shape)  # type: ignore
-    # covariances = gmm.covariances_
-    # print("covariances.shape: ", covariances.shape)  # type: ignore
-
-    mean, covariance = gmm.compute_mean_and_covariance(
-        num_samples=cfg.gmm.n_samples_fit,
-        target_class=cfg.gmm.target_class,
-        batch_size=cfg.gmm.batch_size,
+    class_stats = gmm.compute_mean_and_covariance(
+        num_samples_per_class=cfg.gmm.n_samples_fit
     )
 
-    gmm.save_samples_single_class(
-        mean=mean,
-        covariance=covariance,
-        n_samples=cfg.gmm.n_samples_generate,
+    gmm.sample_from_computed_stats(
+        class_stats=class_stats,
+        n_samples_per_class=cfg.gmm.n_samples_generate,
         save_dir=cfg.gmm.save_dir,
     )
 

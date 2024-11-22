@@ -1,14 +1,40 @@
 import os
 import warnings
 from dataclasses import dataclass
-from typing import Callable, Dict, Optional, Tuple
+from typing import Callable, Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
-from torch.utils.data import DataLoader, SubsetRandomSampler
+from torch.utils.data import DataLoader, Dataset, SubsetRandomSampler
 from torchvision.datasets import DatasetFolder, ImageFolder, VisionDataset
+
+
+class MultiClassSubset(Dataset):
+    """
+    Wrap a subset of a dataset to apply a mapping of targets (class labels) to
+    user-specified multi-class classification labels
+    """
+
+    def __init__(
+        self, subset, class_to_index, device: Union[torch.device, str] = "cpu"
+    ):
+        self.subset = subset
+        self.class_to_index = class_to_index
+        self.device = device
+
+    def __getitem__(self, index):
+        data, target = self.subset[index]
+        # if target not in self.class_to_index:
+        #     raise ValueError(f"Target {target} not valid for multi-class subset")
+        label = self.class_to_index[target]
+        return data.to(self.device), torch.tensor(label, dtype=torch.float).to(
+            self.device
+        )
+
+    def __len__(self):
+        return len(self.subset)
 
 
 class DataPrefetcher:
