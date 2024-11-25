@@ -14,7 +14,7 @@ def main(cfg):
 
     logger.info(
         f"\nFitting GMM on {cfg.gmm.n_samples_fit} samples from {cfg.gmm.data_dir}.\n"
-        f"Class list: {cfg.gmm.class_list}.\n"
+        f"Class list: {cfg.gmm.classes}.\n"
         f"Saving {cfg.gmm.n_samples_generate} samples to {cfg.gmm.save_dir}."
     )
 
@@ -26,8 +26,8 @@ def main(cfg):
 
     gmm = ImageGMM(
         n_components=cfg.gmm.n_components,
-        dataset=cfg.gmm.dataset,
-        class_list=cfg.gmm.class_list,
+        dataset=dataset,
+        classes=cfg.gmm.classes,
         covariance_type=cfg.gmm.covariance_type,
         verbose=True,
         rseed=cfg.rseed,
@@ -37,13 +37,15 @@ def main(cfg):
     # gmm.save_samples(n_samples=cfg.gmm.n_samples_generate, save_dir=cfg.gmm.save_dir)
 
     class_stats = gmm.compute_mean_and_covariance(
-        num_samples_per_class=cfg.gmm.n_samples_fit
+        num_samples_per_class=cfg.gmm.n_samples_fit,
     )
 
     gmm.sample_from_computed_stats(
         class_stats=class_stats,
         n_samples_per_class=cfg.gmm.n_samples_generate,
         save_dir=cfg.gmm.save_dir,
+        batch_size=cfg.gmm.batch_size,
+        sample_idx=cfg.gmm.sample_idx,
     )
 
 

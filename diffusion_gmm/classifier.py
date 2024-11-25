@@ -7,9 +7,11 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Type, Union
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader, Subset
+from torchvision import models
 from tqdm.auto import tqdm
 
 from diffusion_gmm.base import (
@@ -29,14 +31,11 @@ class LinearMulticlassClassifier(nn.Module):
 
     def __init__(self, num_classes: int, input_dim: int):
         super(LinearMulticlassClassifier, self).__init__()
-        self.fc = nn.Linear(
-            input_dim, num_classes
-        )  # Output num_classes for multiclass classification
-        self.softmax = nn.Softmax(dim=1)
+        self.fc = nn.Linear(input_dim, num_classes)
 
     def forward(self, x):
         x = x.view(x.size(0), -1)  # Flatten the input
-        return self.softmax(self.fc(x))
+        return F.softmax(self.fc(x), dim=1)
 
 
 # Define a fully connected two-layer network for multiclass classification
@@ -50,12 +49,11 @@ class TwoLayerMulticlassClassifier(nn.Module):
         self.fc1 = nn.Linear(input_dim, hidden_dim)  # First layer
         self.relu = nn.ReLU()  # Activation function
         self.fc2 = nn.Linear(hidden_dim, num_classes)  # Second layer
-        self.softmax = nn.Softmax(dim=1)  # Output layer for multiclass classification
 
     def forward(self, x):
         x = x.view(x.size(0), -1)  # Flatten the input
         x = self.relu(self.fc1(x))  # First layer with ReLU activation
-        return self.softmax(self.fc2(x))  # Second layer with Softmax activation
+        return F.softmax(self.fc2(x), dim=1)  # Second layer with Softmax activation
 
 
 # Define a simple linear classifier
@@ -74,8 +72,9 @@ class LinearBinaryClassifier(nn.Module):
         if num_classes != 2:
             raise ValueError("num_classes must be 2 for binary classification")
         super(LinearBinaryClassifier, self).__init__()
-        self.fc = nn.Linear(input_dim, 1)  # Output 1 for binary classification
-        self.sigmoid = nn.Sigmoid()
+        self.fc = nn.Linear(
+            input_dim, 1, bias=True
+        )  # Output 1 for binary classification
         self.output_logit = output_logit
 
     def forward(self, x):
@@ -83,7 +82,7 @@ class LinearBinaryClassifier(nn.Module):
         if self.output_logit:
             return self.fc(x)
         else:
-            return self.sigmoid(self.fc(x))
+            return torch.sigmoid(self.fc(x))
 
 
 # Define a two-layer fully connected binary classifier
@@ -111,7 +110,6 @@ class TwoLayerBinaryClassifier(nn.Module):
         self.fc1 = nn.Linear(input_dim, hidden_dim)  # First layer
         self.relu = nn.ReLU()  # Activation function
         self.fc2 = nn.Linear(hidden_dim, 1)  # Second layer for binary classification
-        self.sigmoid = nn.Sigmoid()
         self.output_logit = output_logit
 
     def forward(self, x):
@@ -120,7 +118,45 @@ class TwoLayerBinaryClassifier(nn.Module):
         if self.output_logit:
             return self.fc2(x)  # Return logits
         else:
-            return self.sigmoid(self.fc2(x))  # Return probabilities
+            return torch.sigmoid(self.fc2(x))  # Return probabilities
+
+
+class ResNet64(nn.Module):
+    """
+    ResNet model adapted for 64x64 input images
+    """
+
+    def __init__(
+        self,
+        num_classes: int,
+        input_dim: int,
+        pretrained: bool = True,
+        output_logit: bool = False,
+    ):
+        super(ResNet64, self).__init__()
+        # Load a pre-defined ResNet model
+        self.pretrained = pretrained
+        self.resnet = models.resnet18(pretrained=self.pretrained)
+        self.output_logit = output_logit
+
+        # No change, but exposing this could be useful
+        self.resnet.conv1 = nn.Conv2d(
+            in_channels=3,
+            out_channels=64,
+            kernel_size=7,
+            stride=2,
+            padding=3,
+            bias=False,
+        )
+
+        # Modify the fully connected layer to output the correct number of classes
+        self.resnet.fc = nn.Linear(self.resnet.fc.in_features, 1)
+
+    def forward(self, x):
+        if self.output_logit:
+            return self.resnet(x)
+        else:
+            return torch.sigmoid(self.resnet(x))
 
 
 @dataclass
@@ -170,12 +206,16 @@ class ClassifierExperiment:
 
         self.rng = np.random.default_rng(self.rseed)
 
-        if self.model_class in [LinearBinaryClassifier, TwoLayerBinaryClassifier]:
+        self.use_one_hot_enc = False
+        # if self.model_class in [LinearBinaryClassifier, TwoLayerBinaryClassifier]:
+        if len(self.class_list) == 2:
             # BCELoss and MSELoss require labels to be floats (same type as output)
-            # Furthremore, predictions are made by rounding scalar, rather than taking torch.max
+            # Furthermore, predictions are made by rounding scalar, rather than taking torch.max
             self.use_binary_classifier = True
         else:
             self.use_binary_classifier = False
+            if self.criterion_class == nn.MSELoss:
+                self.use_one_hot_enc = True
 
     def make_model_and_optimizer(self):
         self.model = self.model_class(
@@ -207,12 +247,17 @@ class ClassifierExperiment:
                 warnings.warn("Inputs or labels are None")
                 logger.warning("Inputs or labels are None")
                 continue
-            inputs, labels = (
-                inputs.to(self.device, non_blocking=True).float(),
-                labels.to(self.device, non_blocking=True).long()
-                if not self.use_binary_classifier
-                else labels.to(self.device, non_blocking=True).float(),
-            )
+            inputs = inputs.to(self.device, non_blocking=True).float()
+            if self.use_one_hot_enc:
+                labels = F.one_hot(
+                    labels.long(), num_classes=len(self.class_list)
+                ).float()
+            else:
+                labels = (
+                    labels.to(self.device, non_blocking=True).long()
+                    if not self.use_binary_classifier
+                    else labels.to(self.device, non_blocking=True).float()
+                )
             self.optimizer.zero_grad()
             outputs = self.model(inputs).squeeze()
             loss = self.criterion(outputs, labels)
@@ -237,12 +282,17 @@ class ClassifierExperiment:
                     warnings.warn("Inputs or labels are None")
                     logger.warning("Inputs or labels are None")
                     continue
-                inputs, labels = (
-                    inputs.to(self.device, non_blocking=True).float(),
-                    labels.to(self.device, non_blocking=True).long()
-                    if not self.use_binary_classifier
-                    else labels.to(self.device, non_blocking=True).float(),
-                )
+                inputs = inputs.to(self.device, non_blocking=True).float()
+                if self.use_one_hot_enc:
+                    labels = F.one_hot(
+                        labels.long(), num_classes=len(self.class_list)
+                    ).float()
+                else:
+                    labels = (
+                        labels.to(self.device, non_blocking=True).long()
+                        if not self.use_binary_classifier
+                        else labels.to(self.device, non_blocking=True).float()
+                    )
                 outputs = self.model(inputs).squeeze()
                 loss = self.criterion(outputs, labels)
                 running_loss += loss.item() * inputs.size(0)
@@ -250,6 +300,11 @@ class ClassifierExperiment:
                     preds = torch.round(outputs)  # binary predictions
                 else:
                     _, preds = torch.max(outputs, dim=1)
+
+                # Undo one-hot encoding for comparison
+                if self.use_one_hot_enc:
+                    labels = torch.argmax(labels, dim=1)
+
                 correct += (preds == labels).sum().item()
 
             n_total = len(dataloader.dataset)  # type: ignore
@@ -333,8 +388,11 @@ class ClassifierExperiment:
         num_epochs: int = 20,
         batch_size: int = 64,
         dataloader_kwargs: Optional[Dict[str, Any]] = None,
+        save_interval: int = 1,
+        save_results_path: str = "classifier_results.json",
         verbose: bool = False,
         log_every_n_epochs: int = 50,
+        early_stopping_patience: int = 50,
     ) -> Dict[str, List[List[Tuple[float, float, int]]]]:
         """
         Run the classifier experiment
@@ -408,9 +466,13 @@ class ClassifierExperiment:
                     )
 
                 best_test_loss = float("inf")
+                early_stopping_counter = 0
+                patience = early_stopping_patience
+
                 for epoch in tqdm(range(num_epochs), desc="Training"):
                     train_loss = self.train(train_loader)
                     test_loss, accuracy = self.evaluate(test_loader)
+
                     if test_loss < best_test_loss:
                         best_test_loss = test_loss
                         results[prop_idx] = {
@@ -420,6 +482,14 @@ class ClassifierExperiment:
                             "accuracy": accuracy,
                             "epoch": epoch,
                         }
+                        early_stopping_counter = 0  # Reset counter if improvement
+                    else:
+                        early_stopping_counter += 1
+
+                    if early_stopping_counter >= patience:
+                        logger.info("Early stopping triggered at epoch %d", epoch)
+                        break
+
                     if self.scheduler is not None:
                         self.scheduler.step()
 
@@ -447,28 +517,42 @@ class ClassifierExperiment:
                 )
             results_all_runs.append(results)
 
-        results_dict = {
-            "num_train_samples": [
-                [result[prop_idx]["num_train_samples"] for result in results_all_runs]
-                for prop_idx in range(n_props_train)
-            ],
-            "train_losses": [
-                [result[prop_idx]["train_loss"] for result in results_all_runs]
-                for prop_idx in range(n_props_train)
-            ],
-            "test_losses": [
-                [result[prop_idx]["test_loss"] for result in results_all_runs]
-                for prop_idx in range(n_props_train)
-            ],
-            "accuracies": [
-                [result[prop_idx]["accuracy"] for result in results_all_runs]
-                for prop_idx in range(n_props_train)
-            ],
-            "epochs": [
-                [result[prop_idx]["epoch"] for result in results_all_runs]
-                for prop_idx in range(n_props_train)
-            ],
-        }
-        if verbose:
-            logger.info("Results:\n%s", json.dumps(results_dict, indent=4))
+            if run_idx % save_interval == 0 or run_idx == n_runs - 1:
+                results_dict = {
+                    "num_train_samples": [
+                        [
+                            result[prop_idx]["num_train_samples"]
+                            for result in results_all_runs
+                        ]
+                        for prop_idx in range(n_props_train)
+                    ],
+                    "accuracies": [
+                        [result[prop_idx]["accuracy"] for result in results_all_runs]
+                        for prop_idx in range(n_props_train)
+                    ],
+                    "test_losses": [
+                        [result[prop_idx]["test_loss"] for result in results_all_runs]
+                        for prop_idx in range(n_props_train)
+                    ],
+                    "train_losses": [
+                        [result[prop_idx]["train_loss"] for result in results_all_runs]
+                        for prop_idx in range(n_props_train)
+                    ],
+                    "epochs": [
+                        [result[prop_idx]["epoch"] for result in results_all_runs]
+                        for prop_idx in range(n_props_train)
+                    ],
+                }
+                if verbose:
+                    logger.info(
+                        "Results after run %d:\n%s",
+                        run_idx,
+                        json.dumps(results_dict, indent=4),
+                    )
+                with open(save_results_path, "w") as results_file:
+                    json.dump(
+                        {"results": results_dict},
+                        results_file,
+                        indent=4,
+                    )
         return results_dict

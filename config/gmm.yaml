@@ -1,11 +1,19 @@
 gmm:
   n_components: 1
-  data_dir: "/stor/work/AMDG_Gilpin_Summer2024/vision_datasets/cifar10"
-  dataset_name: cifar10
+  data_dir: null
+  dataset_name: null
   covariance_type: full
-  class_list:
+  batch_size: 64
+  sample_idx: 0
+  classes:
     - bird
     - cat
     - dog
-  save_dir: "/stor/work/AMDG_Gilpin_Summer2024/vision_datasets/gmm_cifar10/unknown"
+  n_samples_fit: 1024
+  n_samples_generate: 1024
+  save_dir: null
   verbose: true
+
+
+  # data_dir: "/stor/work/AMDG_Gilpin_Summer2024/vision_datasets/cifar10"
+  # dataset_name: CIFAR10

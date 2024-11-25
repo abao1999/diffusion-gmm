@@ -119,12 +119,20 @@ def split_dataset_balanced(
     return train_subset, test_subset
 
 
+def get_sample_shape(dataset: DatasetFolder) -> Tuple[int, int, int]:
+    sample, _ = dataset[0]
+    if isinstance(sample, torch.Tensor):
+        return sample.shape  # type: ignore
+    else:
+        return transforms.ToTensor()(sample).shape  # type: ignore
+
+
 def make_balanced_subsets(
     class_list: List[str],
     data_dir: str,
     max_allowed_samples_per_class: Optional[int],
     train_split: float = 0.8,
-    use_augmentations: bool = False,
+    train_augmentations: Optional[transforms.Compose] = None,
     rng: Optional[np.random.Generator] = None,
     verbose: bool = False,
 ) -> Tuple[Subset, Optional[Subset]]:
@@ -142,37 +150,13 @@ def make_balanced_subsets(
         return train_subset, test_subset
 
     if test_subset is not None:
-        # Define the basic transformation for the test dataset
-        test_transform = transforms.ToTensor()
-        test_subset.dataset.transform = test_transform  # type: ignore
+        test_subset.dataset.transform = transforms.ToTensor()  # type: ignore
 
-    # Define the data augmentation pipeline for the train dataset
-    if use_augmentations:
-        # set up augmentations (for train subset only)
-        sample, _ = train_subset.dataset[0]
-        if isinstance(sample, torch.Tensor):
-            # If the sample is already a tensor (e.g., from npy files)
-            img_shape = sample.shape
-        else:
-            # If the sample is a PIL image, convert it to a tensor first
-            sample_tensor = transforms.ToTensor()(sample)
-            img_shape = sample_tensor.shape
-
-        train_transform = transforms.Compose(
-            [
-                transforms.RandomHorizontalFlip(),
-                transforms.RandomVerticalFlip(),
-                transforms.RandomResizedCrop(img_shape[1:], scale=(0.8, 1.0)),
-                transforms.ColorJitter(
-                    brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1
-                ),
-                transforms.ToTensor(),  # Ensure the data is converted to a tensor
-            ]
-        )
-    else:
-        train_transform = transforms.ToTensor()
-
-    train_subset.dataset.transform = train_transform  # type: ignore
+    train_subset.dataset.transform = (  # type: ignore
+        train_augmentations
+        if train_augmentations is not None
+        else transforms.ToTensor()
+    )
     return train_subset, test_subset
 
 

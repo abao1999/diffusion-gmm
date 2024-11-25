@@ -27,7 +27,6 @@ def main(cfg):
 
     # set torch, cuda, and cudnn seeds
     set_seed(cfg.rseed)
-    # set numpy rng
     rng = np.random.default_rng(cfg.rseed)
 
     train_subset, test_subset = make_balanced_subsets(
@@ -35,8 +34,8 @@ def main(cfg):
         data_dir=cfg.classifier.train_data_dir,
         max_allowed_samples_per_class=cfg.classifier.max_allowed_samples_per_class,
         train_split=cfg.classifier.train_split,
-        use_augmentations=cfg.classifier.use_augmentations,
-        rng=None,  # rng
+        train_augmentations=None,
+        rng=rng if cfg.classifier.resample_train_subset else None,
         verbose=cfg.classifier.verbose,
     )
 
@@ -46,7 +45,8 @@ def main(cfg):
             data_dir=cfg.classifier.test_data_dir,
             max_allowed_samples_per_class=cfg.classifier.max_allowed_samples_per_class_test,
             train_split=1.0,
-            use_augmentations=False,
+            train_augmentations=None,
+            rng=rng if cfg.classifier.resample_test_subset else None,
             verbose=cfg.classifier.verbose,
         )
 
@@ -89,7 +89,12 @@ def main(cfg):
     )
 
     prop_train_schedule = np.linspace(1.0, 0.05, cfg.classifier.n_props_train)
-    # prop_train_schedule = np.array([0.5**i for i in range(cfg.classifier.n_props_train)])
+
+    save_dir = os.path.join(cfg.classifier.save_dir, cfg.classifier.model.name)
+    os.makedirs(save_dir, exist_ok=True)
+    save_name = f"{cfg.classifier.save_name}.json"
+    results_file_path = os.path.join(save_dir, save_name)
+
     results_dict = experiment.run(
         prop_train_schedule=prop_train_schedule,  # type: ignore
         n_runs=cfg.classifier.n_runs,
@@ -97,18 +102,18 @@ def main(cfg):
         num_epochs=cfg.classifier.num_epochs,
         batch_size=cfg.classifier.batch_size,
         dataloader_kwargs=cfg.classifier.dataloader_kwargs,
+        save_results_path=results_file_path,
+        save_interval=1,
+        early_stopping_patience=cfg.classifier.early_stopping_patience,
         verbose=cfg.classifier.verbose,
     )
 
-    print(results_dict)
-
-    save_dir = os.path.join(cfg.classifier.save_dir, cfg.classifier.model.name)
-    os.makedirs(save_dir, exist_ok=True)
-    save_name = f"{cfg.classifier.save_name}.json"
-    results_file_path = os.path.join(save_dir, save_name)
-
     with open(results_file_path, "w") as results_file:
-        json.dump({"results": results_dict, "config": cfg_dict}, results_file, indent=4)
+        json.dump(
+            {"results": results_dict, "config": cfg_dict},
+            results_file,
+            indent=4,
+        )
 
 
 if __name__ == "__main__":

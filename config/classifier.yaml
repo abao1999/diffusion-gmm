@@ -9,12 +9,15 @@ classifier:
   train_split: 0.8
   max_allowed_samples_per_class: 1024
   max_allowed_samples_per_class_test: 1024
+  train_augmentations: null
   batch_size: 64
   device: cuda:5
   n_runs: 10
   n_props_train: 10
-  use_augmentations: false
+  resample_train_subset: false
+  resample_test_subset: false
   reset_model_random_seed: false
+  early_stopping_patience: 50
   verbose: false
   save_dir: results/classifier
   save_name: classifier
@@ -35,7 +38,11 @@ classifier:
     TwoLayerBinaryClassifier_kwargs:
       hidden_dim: 64
       output_logit: false
-      
+
+    ResNet64_kwargs:
+      pretrained: true
+      output_logit: false
+
   optimizer:
     name: SGD
 
@@ -72,7 +79,7 @@ classifier:
 
   dataloader_kwargs:
     shuffle: true
-    num_workers: 12
+    num_workers: 24
     persistent_workers: true
     pin_memory: true
     make_prefetcher: true
