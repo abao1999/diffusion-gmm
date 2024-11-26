@@ -14,14 +14,15 @@ from torchvision.datasets.folder import default_loader
 logger = logging.getLogger(__name__)
 
 
-def set_seed(rseed: int):
+def set_seed(rseed: int, verbose: bool = False):
     """
     Set the seed for the random number generator for torch, cuda, and cudnn
     """
-    print(torch.cuda.is_available())
-    print(torch.cuda.device_count())
-    print(torch.cuda.current_device())
-    print(torch.cuda.get_device_name(0))
+    if verbose:
+        print(torch.cuda.is_available())
+        print(torch.cuda.device_count())
+        print(torch.cuda.current_device())
+        print(torch.cuda.get_device_name(0))
 
     torch.manual_seed(rseed)
     # If using CUDA, you should also set the seed for CUDA for full reproducibility
@@ -49,6 +50,13 @@ def get_targets(dataset: DatasetFolder) -> np.ndarray:
     else:
         raise AttributeError("Dataset doesn't have 'targets' or 'samples' attribute")
     return np.array(targets)
+
+
+def get_img_shape(dataset: DatasetFolder) -> Tuple:
+    sample, _ = dataset[0]
+    if not isinstance(sample, torch.Tensor):
+        raise ValueError("Sample is not a tensor")
+    return sample.shape
 
 
 def setup_dataset(
@@ -145,6 +153,8 @@ def make_balanced_subsets(
         rng=rng,
         verbose=verbose,
     )
+    if test_subset is not None:
+        validate_subsets(train_subset, test_subset)
 
     if is_npy_dataset:
         return train_subset, test_subset

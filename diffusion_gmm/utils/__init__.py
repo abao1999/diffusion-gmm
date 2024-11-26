@@ -1,4 +1,5 @@
 from .data_utils import (
+    get_img_shape,
     get_targets,
     make_balanced_subsets,
     set_seed,

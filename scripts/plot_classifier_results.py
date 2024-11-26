@@ -1,3 +1,4 @@
+import glob
 import json
 import os
 from collections import defaultdict
@@ -325,27 +326,20 @@ if __name__ == "__main__":
     # }
 
     model_name = "LinearMulticlassClassifier"
-
-    run_names_dict = {
-        "Diffusion": [
-            f"edm_imagenet64_bs128_MSELoss_english_springer_french_horn_church_tench_{timestamp}"
-            for timestamp in ["11-24_17-32-12", "11-24_19-55-28"]
-        ],
-        "GMM": [
-            f"gmm_edm_imagenet64_bs128_MSELoss_english_springer_french_horn_church_tench_{timestamp}"
-            for timestamp in ["11-24_17-32-12", "11-24_19-55-28"]
-        ],
-    }
-
     json_dir = f"results/classifier/{model_name}"
-    # json_dir = "results/classifier/backup"
+    class_list = ["church", "tench", "english_springer", "french_horn"]
+
+    classes_name = "-".join(class_list)
+    print(classes_name)
     run_json_paths = {
-        name: [
-            os.path.join(json_dir, f"{run_name}.json")
-            for run_name in run_names_dict[name]
-        ]
-        for name in run_names_dict
+        "Diffusion": glob.glob(
+            os.path.join(json_dir, f"edm_imagenet64_*{classes_name}*.json"),
+        ),
+        "GMM": glob.glob(
+            os.path.join(json_dir, f"gmm_edm_imagenet64_*{classes_name}*.json")
+        ),
     }
+    print(run_json_paths)
     save_name = f"{model_name}_classifier"
     plot_results(
         run_json_paths,

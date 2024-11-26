@@ -1,4 +1,3 @@
-import json
 import logging
 import warnings
 from dataclasses import dataclass
@@ -165,9 +164,7 @@ class ClassifierExperiment:
     Base class for classifier experiments
     """
 
-    train_subset: Subset
-    test_subset: Subset
-
+    input_dim: int
     class_list: List[str]
 
     # model parameters
@@ -183,7 +180,6 @@ class ClassifierExperiment:
     # training parameters
     lr: float = 1e-3
     device: Union[torch.device, str] = "cpu"
-    rseed: int = 99
     verbose: bool = False
 
     def __post_init__(self):
@@ -197,14 +193,6 @@ class ClassifierExperiment:
         print("current device: ", torch.cuda.current_device())
 
         self.criterion = self.criterion_class()
-
-        sample, _ = self.train_subset.dataset[0]
-        if isinstance(sample, torch.Tensor):
-            self.img_shape = sample.shape
-        else:
-            raise ValueError("Sample is not a tensor")
-
-        self.rng = np.random.default_rng(self.rseed)
 
         self.use_one_hot_enc = False
         # if self.model_class in [LinearBinaryClassifier, TwoLayerBinaryClassifier]:
@@ -220,7 +208,7 @@ class ClassifierExperiment:
     def make_model_and_optimizer(self):
         self.model = self.model_class(
             num_classes=len(self.class_list),
-            input_dim=np.prod(self.img_shape),
+            input_dim=self.input_dim,
             **(self.model_kwargs or {}),
         ).to(self.device)
         # self.model.to(self.device)
@@ -315,8 +303,8 @@ class ClassifierExperiment:
     def _build_dataloader(
         self,
         subset: Subset,
+        n_samples_per_class: int,
         batch_size: int = 64,
-        prop_samples_to_use: float = 1.0,
         rng: Optional[np.random.Generator] = None,
         shuffle: bool = True,
         num_workers: int = 4,
@@ -324,13 +312,15 @@ class ClassifierExperiment:
         persistent_workers: bool = True,
         make_prefetcher: bool = True,
     ) -> DataLoader | DataPrefetcher:
+        # hardcode balance class distribution
+        n_samples_to_use = int(n_samples_per_class * len(self.class_list))
         dataset = subset.dataset
         class_to_idx = dataset.class_to_idx  # type: ignore
         # Map class indices to user-specified multi-class classification labels
         class_idx_to_label = {
             class_to_idx[cls]: idx for idx, cls in enumerate(self.class_list)
         }
-        if prop_samples_to_use < 1.0:
+        if n_samples_to_use < len(subset):
             subset_indices = subset.indices
             targets = get_targets(dataset)  # type: ignore
 
@@ -346,12 +336,12 @@ class ClassifierExperiment:
                     )
 
             # Shuffle and select a proportion of indices for each class
+            prop_to_use = n_samples_to_use / len(subset)
             selected_indices = []
-            rng = rng if rng is not None else self.rng
             for class_idx, indices in class_to_indices.items():
-                if shuffle:
+                if rng is not None:
                     rng.shuffle(indices)
-                subset_size = int(len(indices) * prop_samples_to_use)
+                subset_size = int(len(indices) * prop_to_use)
                 selected_indices.extend(indices[:subset_size])
 
             selected_subset = MultiClassSubset(
@@ -382,177 +372,99 @@ class ClassifierExperiment:
 
     def run(
         self,
-        prop_train_schedule: Sequence[float],
-        n_runs: int = 1,
-        reset_model_random_seed: bool = False,
+        train_subset: Subset,
+        test_subset: Subset,
+        rng: np.random.Generator,
+        n_train_per_class_schedule: Sequence[int],
+        n_test_samples_per_class: int,
         num_epochs: int = 20,
+        early_stopping_patience: int = 50,
         batch_size: int = 64,
         dataloader_kwargs: Optional[Dict[str, Any]] = None,
-        save_interval: int = 1,
-        save_results_path: str = "classifier_results.json",
         verbose: bool = False,
         log_every_n_epochs: int = 50,
-        early_stopping_patience: int = 50,
-    ) -> Dict[str, List[List[Tuple[float, float, int]]]]:
+    ) -> List[Dict[str, Any]]:
         """
         Run the classifier experiment
-        Args:
-            prop_train_schedule: Schedule for proportion of samples in training split to use for training
-            train_indices: Indices to use for training
-            test_subset_inds: Indices to use for testing
         """
+        test_loader = self._build_dataloader(
+            test_subset,
+            batch_size=batch_size,
+            **(dataloader_kwargs or {}),
+            rng=rng,
+            n_samples_per_class=int(n_test_samples_per_class),
+        )
 
         if verbose:
             logger.info(
-                "Running classifier experiment with %s classes...", self.class_list
-            )
-            logger.info("prop_train_schedule: %s", prop_train_schedule)
-            logger.info(
-                "Building test dataloader with %d samples...",
-                len(self.test_subset.indices),
+                f"Built test dataloader with {len(test_loader.dataset)} samples from the test split...",  # type: ignore
             )
 
-        n_props_train = len(prop_train_schedule)
+        results: List[Dict[str, Any]] = [{}] * len(n_train_per_class_schedule)
+        for i, n_train_per_class in tqdm(
+            enumerate(n_train_per_class_schedule),
+            desc="Training on different numbers of training samples",
+        ):
+            # reset the model and optimizer and scheduler to the initial state
+            self.make_model_and_optimizer()
+            n_train_per_class = int(n_train_per_class)
+            # build train dataloader
+            train_loader = self._build_dataloader(
+                train_subset,
+                batch_size=batch_size,
+                n_samples_per_class=n_train_per_class,
+                rng=rng,
+                **(dataloader_kwargs or {}),
+            )
 
-        test_loader = self._build_dataloader(
-            self.test_subset,
-            batch_size=batch_size,
-            **(dataloader_kwargs or {}),
-        )
-
-        rng_stream = self.rng.spawn(n_runs)
-
-        results_all_runs = []
-        for run_idx in tqdm(range(n_runs), desc="Running classifier experiment"):
-            # fix random seed for each run
-            rng = rng_stream[run_idx]
-
-            if reset_model_random_seed:
-                # set torch random seed for this run
-                rseed = self.rseed + run_idx
-                print(f"Setting torch random seed to {rseed} for run {run_idx}")
-                torch.manual_seed(rseed)
-                # If using CUDA, you should also set the seed for CUDA for full reproducibility
-                if torch.cuda.is_available():
-                    torch.cuda.manual_seed(rseed)
-                    torch.cuda.manual_seed_all(rseed)  # if you have multiple GPUs
-
-            # train on different proportions of the training set, defined by prop_train_schedule
-            results: List[Dict[str, Any]] = [{}] * n_props_train
-            for prop_idx in tqdm(
-                range(n_props_train),
-                desc="Training on different proportions of the training set",
-            ):
-                # reset the model and optimizer and scheduler to the initial state
-                self.make_model_and_optimizer()
-
-                prop_train = prop_train_schedule[prop_idx]
-
-                # build train dataloader
-                train_loader = self._build_dataloader(
-                    self.train_subset,
-                    batch_size=batch_size,
-                    prop_samples_to_use=prop_train,
-                    rng=rng,
-                    **(dataloader_kwargs or {}),
-                )
-
-                if verbose:
-                    logger.info(
-                        f"run {run_idx}, prop_train {prop_train_schedule[prop_idx]}"
-                    )
-                    logger.info(
-                        f"Building train dataloader using {len(train_loader.dataset)} samples from the training split..."  # type: ignore
-                    )
-
-                best_test_loss = float("inf")
-                early_stopping_counter = 0
-                patience = early_stopping_patience
-
-                for epoch in tqdm(range(num_epochs), desc="Training"):
-                    train_loss = self.train(train_loader)
-                    test_loss, accuracy = self.evaluate(test_loader)
-
-                    if test_loss < best_test_loss:
-                        best_test_loss = test_loss
-                        results[prop_idx] = {
-                            "num_train_samples": len(train_loader.dataset),  # type: ignore
-                            "train_loss": train_loss,
-                            "test_loss": test_loss,
-                            "accuracy": accuracy,
-                            "epoch": epoch,
-                        }
-                        early_stopping_counter = 0  # Reset counter if improvement
-                    else:
-                        early_stopping_counter += 1
-
-                    if early_stopping_counter >= patience:
-                        logger.info("Early stopping triggered at epoch %d", epoch)
-                        break
-
-                    if self.scheduler is not None:
-                        self.scheduler.step()
-
-                    should_log = verbose and (
-                        epoch % log_every_n_epochs == 0 or epoch == num_epochs - 1
-                    )
-                    if should_log:
-                        logger.info(
-                            "Epoch [%d/%d], Train Loss: %f, Test Loss: %f, Accuracy: %f%%",
-                            epoch + 1,
-                            num_epochs,
-                            train_loss,
-                            test_loss,
-                            accuracy * 100,
-                        )
-                        logger.info(
-                            "Learning rate: %f", self.optimizer.param_groups[0]["lr"]
-                        )
-
+            if verbose:
+                logger.info(f"n_train_per_class {n_train_per_class}")
                 logger.info(
-                    "Final results for run %d, prop %f: %s",
-                    run_idx,
-                    prop_train,
-                    results[prop_idx],
+                    f"Building train dataloader using {len(train_loader.dataset)} samples from the training split..."  # type: ignore
                 )
-            results_all_runs.append(results)
 
-            if run_idx % save_interval == 0 or run_idx == n_runs - 1:
-                results_dict = {
-                    "num_train_samples": [
-                        [
-                            result[prop_idx]["num_train_samples"]
-                            for result in results_all_runs
-                        ]
-                        for prop_idx in range(n_props_train)
-                    ],
-                    "accuracies": [
-                        [result[prop_idx]["accuracy"] for result in results_all_runs]
-                        for prop_idx in range(n_props_train)
-                    ],
-                    "test_losses": [
-                        [result[prop_idx]["test_loss"] for result in results_all_runs]
-                        for prop_idx in range(n_props_train)
-                    ],
-                    "train_losses": [
-                        [result[prop_idx]["train_loss"] for result in results_all_runs]
-                        for prop_idx in range(n_props_train)
-                    ],
-                    "epochs": [
-                        [result[prop_idx]["epoch"] for result in results_all_runs]
-                        for prop_idx in range(n_props_train)
-                    ],
-                }
-                if verbose:
+            best_test_loss = float("inf")
+            early_stopping_counter = 0
+            patience = early_stopping_patience
+
+            for epoch in tqdm(range(num_epochs), desc="Training"):
+                train_loss = self.train(train_loader)
+                test_loss, accuracy = self.evaluate(test_loader)
+
+                if test_loss < best_test_loss:
+                    best_test_loss = test_loss
+                    results[i] = {
+                        "num_train_samples": len(train_loader.dataset),  # type: ignore
+                        "train_loss": train_loss,
+                        "test_loss": test_loss,
+                        "accuracy": accuracy,
+                        "epoch": epoch,
+                    }
+                    early_stopping_counter = 0  # Reset counter if improvement
+                else:
+                    early_stopping_counter += 1
+
+                if early_stopping_counter >= patience:
+                    logger.info("Early stopping triggered at epoch %d", epoch)
+                    break
+
+                if self.scheduler is not None:
+                    self.scheduler.step()
+
+                should_log = verbose and (
+                    epoch % log_every_n_epochs == 0 or epoch == num_epochs - 1
+                )
+                if should_log:
                     logger.info(
-                        "Results after run %d:\n%s",
-                        run_idx,
-                        json.dumps(results_dict, indent=4),
+                        "Epoch [%d/%d], Train Loss: %f, Test Loss: %f, Accuracy: %f%%",
+                        epoch + 1,
+                        num_epochs,
+                        train_loss,
+                        test_loss,
+                        accuracy * 100,
                     )
-                with open(save_results_path, "w") as results_file:
-                    json.dump(
-                        {"results": results_dict},
-                        results_file,
-                        indent=4,
+                    logger.info(
+                        "Learning rate: %f", self.optimizer.param_groups[0]["lr"]
                     )
-        return results_dict
+
+        return results

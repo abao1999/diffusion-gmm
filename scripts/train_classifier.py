@@ -8,10 +8,12 @@ import torch.nn as nn
 import torch.optim as optim
 from omegaconf import OmegaConf
 from torch.optim import lr_scheduler
+from tqdm import tqdm
 
 from diffusion_gmm import classifier
 from diffusion_gmm.classifier import ClassifierExperiment
 from diffusion_gmm.utils import (
+    get_img_shape,
     make_balanced_subsets,
     set_seed,
 )
@@ -27,6 +29,7 @@ def main(cfg):
 
     # set torch, cuda, and cudnn seeds
     set_seed(cfg.rseed)
+    logger.info(f"Setting torch random seed to {cfg.rseed}")
     rng = np.random.default_rng(cfg.rseed)
 
     train_subset, test_subset = make_balanced_subsets(
@@ -71,10 +74,14 @@ def main(cfg):
 
     loss_fn = getattr(nn, cfg.classifier.criterion)
 
+    img_shape = get_img_shape(train_subset.dataset)  # type: ignore
+    if img_shape != get_img_shape(test_subset.dataset):  # type: ignore
+        raise ValueError("Train and test subsets have different image shapes")
+    input_dim = int(np.prod(img_shape))
+
     experiment = ClassifierExperiment(
+        input_dim=input_dim,
         class_list=cfg.classifier.class_list,
-        train_subset=train_subset,
-        test_subset=test_subset,
         model_class=model_cls,
         model_kwargs=model_kwargs,
         criterion_class=loss_fn,
@@ -84,29 +91,83 @@ def main(cfg):
         scheduler_kwargs=scheduler_kwargs,
         lr=cfg.classifier.lr,
         device=cfg.classifier.device,
-        rseed=cfg.rseed,
         verbose=cfg.classifier.verbose,
     )
 
-    prop_train_schedule = np.linspace(1.0, 0.05, cfg.classifier.n_props_train)
+    n_train_per_class_schedule = (
+        np.linspace(1.0, 0.05, cfg.classifier.n_props_train)
+        * cfg.classifier.n_train_samples_per_class
+    )
+    print(n_train_per_class_schedule)
 
     save_dir = os.path.join(cfg.classifier.save_dir, cfg.classifier.model.name)
     os.makedirs(save_dir, exist_ok=True)
     save_name = f"{cfg.classifier.save_name}.json"
     results_file_path = os.path.join(save_dir, save_name)
 
-    results_dict = experiment.run(
-        prop_train_schedule=prop_train_schedule,  # type: ignore
-        n_runs=cfg.classifier.n_runs,
-        reset_model_random_seed=cfg.classifier.reset_model_random_seed,
-        num_epochs=cfg.classifier.num_epochs,
-        batch_size=cfg.classifier.batch_size,
-        dataloader_kwargs=cfg.classifier.dataloader_kwargs,
-        save_results_path=results_file_path,
-        save_interval=1,
-        early_stopping_patience=cfg.classifier.early_stopping_patience,
-        verbose=cfg.classifier.verbose,
+    logger.info(
+        f"Running classifier experiment, {cfg.classifier.class_list} classes, "
+        f"num train samples per class schedule: {n_train_per_class_schedule}, "
+        f"num test samples per class: {cfg.classifier.n_test_samples_per_class}, "
+        f"Saving results to {results_file_path}"
     )
+
+    n_runs = cfg.classifier.n_runs
+    rng_stream = rng.spawn(n_runs)
+
+    results_all_runs = []
+    for run_idx in tqdm(range(n_runs), desc="Running classifier experiment"):
+        rng = rng_stream[run_idx]
+
+        if cfg.classifier.reset_model_random_seed:
+            rseed = rng.integers(np.iinfo(np.int32).max)
+            print(f"Setting torch random seed to {rseed} for run {  run_idx}")
+            set_seed(rseed)
+
+        results_dict = experiment.run(
+            train_subset=train_subset,
+            test_subset=test_subset,
+            rng=rng,
+            n_train_per_class_schedule=n_train_per_class_schedule,
+            n_test_samples_per_class=cfg.classifier.n_test_samples_per_class,
+            num_epochs=cfg.classifier.num_epochs,
+            early_stopping_patience=cfg.classifier.early_stopping_patience,
+            batch_size=cfg.classifier.batch_size,
+            dataloader_kwargs=cfg.classifier.dataloader_kwargs,
+            verbose=cfg.classifier.verbose,
+        )
+
+        results_all_runs.append(results_dict)
+
+        if run_idx % cfg.classifier.save_interval == 0 or run_idx == n_runs - 1:
+            results_dict = {
+                "num_train_samples": [
+                    [result[i]["num_train_samples"] for result in results_all_runs]
+                    for i in range(len(n_train_per_class_schedule))
+                ],
+                "accuracies": [
+                    [result[i]["accuracy"] for result in results_all_runs]
+                    for i in range(len(n_train_per_class_schedule))
+                ],
+                "test_losses": [
+                    [result[i]["test_loss"] for result in results_all_runs]
+                    for i in range(len(n_train_per_class_schedule))
+                ],
+                "train_losses": [
+                    [result[i]["train_loss"] for result in results_all_runs]
+                    for i in range(len(n_train_per_class_schedule))
+                ],
+                "epochs": [
+                    [result[i]["epoch"] for result in results_all_runs]
+                    for i in range(len(n_train_per_class_schedule))
+                ],
+            }
+            with open(results_file_path, "w") as results_file:
+                json.dump(
+                    {"results": results_dict},
+                    results_file,
+                    indent=4,
+                )
 
     with open(results_file_path, "w") as results_file:
         json.dump(
