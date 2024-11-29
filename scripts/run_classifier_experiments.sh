@@ -4,7 +4,7 @@ data_dir=$WORK/vision_datasets
 
 train_split=0.8 # set to 1.0 when using separate folder for test set
 n_runs=6
-n_props_train=6
+n_props_train=1
 reset_model_random_seed=false
 save_dir=results/classifier
 num_epochs=500
@@ -12,31 +12,56 @@ max_allowed_samples_per_class=8000
 max_allowed_samples_per_class_test=0
 n_train_samples_per_class=2048
 n_test_samples_per_class=1024
-batch_size=128
-lr=1e-2  # 3e-4
+batch_size=256
+lr=1e-1 # 3e-4
 train_augmentations=None
 resample_train_subset=true
 resample_test_subset=true
-early_stopping_patience=100
+eval_epoch_interval=10
+early_stopping_patience=160
+model_save_dir=$WORK/vision_datasets/checkpoints
+model_save_dir=null
 
-# model_class=LinearBinaryClassifier
 model_class=LinearMulticlassClassifier
 criterion=MSELoss
 optimizer_class=SGD
 
 scheduler_class=CosineAnnealingLR
-rseed=123
+rseed=222
 verbose=true
 
 datetime=$(date +%m-%d_%H-%M-%S)
 
-# class_list=("church" "tench")
-# class_list=("english_springer" "french_horn")
-class_list=("church" "tench" "english_springer" "french_horn")
+class_list=(
+    "baseball"
+    "cauliflower"
+    "church"
+    "coral_reef"
+    "english_springer"
+    "french_horn"
+    "garbage_truck"
+    "goldfinch"
+    "kimono"
+    "mountain_bike"
+    "patas_monkey"
+    "pizza"
+    "planetarium"
+    "polaroid"
+    "racer"
+    "salamandra"
+    "tabby"
+    "tench"
+    "trimaran"
+    "volcano"
+)
 class_list_json=$(printf '%s\n' "${class_list[@]}" | jq -R . | jq -s -c .)
 echo $class_list_json
 
-run_name=$(IFS=-; echo "${class_list[*]}")
+if [ ${#class_list[@]} -le 4 ]; then
+    run_name=$(IFS=-; echo "${class_list[*]}")
+else
+    run_name="${#class_list[@]}_classes"
+fi
 echo $run_name
 
 dataset_list=("edm_imagenet64" "gmm_edm_imagenet64")
@@ -67,13 +92,16 @@ for i in "${!dataset_list[@]}"; do
         classifier.resample_train_subset=$resample_train_subset \
         classifier.resample_test_subset=$resample_test_subset \
         classifier.reset_model_random_seed=$reset_model_random_seed \
+        classifier.eval_epoch_interval=$eval_epoch_interval \
+        classifier.early_stopping_patience=$early_stopping_patience \
+        classifier.model_save_dir=$model_save_dir \
         classifier.save_dir=$save_dir \
         classifier.save_name=${dataset}_bs${batch_size}_${criterion}_${run_name}_${datetime} \
         classifier.device=cuda:${device_idx} \
         classifier.optimizer.name=$optimizer_class \
         classifier.scheduler.name=$scheduler_class \
         classifier.scheduler.CosineAnnealingLR_kwargs.T_max=$num_epochs \
-        classifier.scheduler.CosineAnnealingLR_kwargs.eta_min=1e-4 \
-        rseed=$rseed \
-        classifier.verbose=$verbose
+        classifier.scheduler.CosineAnnealingLR_kwargs.eta_min=1e-2 \
+        classifier.verbose=$verbose \
+        rseed=$rseed
 done

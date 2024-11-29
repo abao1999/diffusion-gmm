@@ -97,7 +97,7 @@ def main(cfg):
     n_train_per_class_schedule = (
         np.linspace(1.0, 0.05, cfg.classifier.n_props_train)
         * cfg.classifier.n_train_samples_per_class
-    )
+    ).astype(int)
     print(n_train_per_class_schedule)
 
     save_dir = os.path.join(cfg.classifier.save_dir, cfg.classifier.model.name)
@@ -124,6 +124,16 @@ def main(cfg):
             print(f"Setting torch random seed to {rseed} for run {  run_idx}")
             set_seed(rseed)
 
+        if cfg.classifier.model_save_dir is not None and run_idx == 0:
+            train_dataset_name = os.path.basename(cfg.classifier.train_data_dir)
+            model_save_dir = os.path.join(
+                cfg.classifier.model_save_dir,
+                cfg.classifier.model.name,
+                train_dataset_name,
+            )
+        else:
+            model_save_dir = None
+
         results_dict = experiment.run(
             train_subset=train_subset,
             test_subset=test_subset,
@@ -132,8 +142,10 @@ def main(cfg):
             n_test_samples_per_class=cfg.classifier.n_test_samples_per_class,
             num_epochs=cfg.classifier.num_epochs,
             early_stopping_patience=cfg.classifier.early_stopping_patience,
+            eval_epoch_interval=cfg.classifier.eval_epoch_interval,
             batch_size=cfg.classifier.batch_size,
             dataloader_kwargs=cfg.classifier.dataloader_kwargs,
+            model_save_dir=model_save_dir,
             verbose=cfg.classifier.verbose,
         )
 

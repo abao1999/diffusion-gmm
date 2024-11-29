@@ -1,15 +1,18 @@
 import copy
 import logging
 import os
+import warnings
 from typing import List, Optional, Tuple
 
 import numpy as np
 import torch
-from torch.utils.data import Subset
+from torch.utils.data import DataLoader, Dataset, Subset
 from torchvision import datasets as torchvision_datasets
 from torchvision import transforms
 from torchvision.datasets import DatasetFolder, ImageFolder
 from torchvision.datasets.folder import default_loader
+
+from diffusion_gmm.base import DataPrefetcher
 
 logger = logging.getLogger(__name__)
 
@@ -180,3 +183,48 @@ def validate_subsets(train_subset: Subset, test_subset: Subset):
     test_inds = test_subset.indices
     if set(train_inds) & set(test_inds):
         raise ValueError("Overlap detected between train and test indices.")
+
+
+def build_dataloader_for_class(
+    dataset: Dataset,
+    target_class: str,
+    batch_size: int = 64,
+    num_workers: int = 4,
+    num_samples: int = 1000,
+    make_prefetcher: bool = False,
+    device: str = "cpu",
+) -> DataLoader | DataPrefetcher:
+    """
+    Build a DataLoader for a specific class from the dataset.
+    """
+    targets = get_targets(dataset)  # type: ignore
+    class_to_idx = dataset.class_to_idx  # type: ignore
+    if target_class not in class_to_idx:
+        raise ValueError(f"Class {target_class} not found in dataset.")
+
+    target_class_idx = class_to_idx[target_class]
+    indices = []
+    for idx, class_idx in enumerate(targets):
+        if len(indices) == num_samples:
+            break
+        if class_idx == target_class_idx:
+            indices.append(idx)
+    if len(indices) < num_samples:
+        warnings.warn(
+            f"Warning: Requested {num_samples} samples, but only {len(indices)} available for class '{target_class}'. Using available samples."
+        )
+
+    selected_subset = Subset(dataset, indices)
+
+    dataloader = DataLoader(
+        selected_subset,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=num_workers,
+        pin_memory=False,
+        persistent_workers=False,
+    )
+    if make_prefetcher:
+        dataloader = DataPrefetcher(dataloader, device)
+
+    return dataloader

@@ -1,6 +1,7 @@
 import argparse
 import os
-from typing import Optional
+import warnings
+from typing import Dict, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -58,6 +59,7 @@ plt.rcParams.update(
         "savefig.transparent": True,
     }
 )
+plt.style.use("ggplot")
 
 
 def plot_spectra_from_npy(
@@ -99,7 +101,7 @@ def plot_spectra_from_npy(
     # Determine the bins based on the combined data
     if len(all_eigenvalues) == 0:
         raise ValueError("No eigenvalues to plot")
-    bins = np.histogram_bin_edges(np.concatenate(all_eigenvalues), bins=150)
+    bins = np.histogram_bin_edges(np.concatenate(all_eigenvalues), bins=100)
     print("Bins shape: ", bins.shape)
 
     plt.figure(figsize=(4, 3))
@@ -147,7 +149,143 @@ def plot_spectra_from_npy(
     print("Saved histogram to ", save_path)
 
 
+def plot_spectra_from_multiple_npy(
+    diffusion_paths: Dict[str, str],
+    gmm_paths: Dict[str, str],
+    n_bins: int = 100,
+    num_cols: int = 4,
+    save_dir: str = "figs",
+    save_name: str = "all_spectra_combined",
+):
+    """
+    Plot spectra of Gram matrices from multiple diffusion and GMM paths.
+    """
+    os.makedirs(save_dir, exist_ok=True)
+    save_path = os.path.join(save_dir, f"{save_name}.pdf")
+
+    num_classes = len(diffusion_paths)
+    # Determine the number of rows and columns for the grid
+    num_rows = (num_classes + num_cols - 1) // num_cols  # Ceiling division
+
+    fig, axes = plt.subplots(
+        nrows=num_rows, ncols=num_cols, figsize=(4 * num_cols, 3 * num_rows)
+    )
+    axes = axes.flatten()  # Flatten the axes array for easy iteration
+
+    for ax, (class_name, diff_path) in zip(axes, diffusion_paths.items()):
+        if os.path.isfile(diff_path):
+            diffusion_eigenvalues = np.load(diff_path)
+
+        gmm_path = gmm_paths[class_name]
+        if os.path.isfile(gmm_path):
+            gmm_eigenvalues = np.load(gmm_path)
+
+        if diffusion_eigenvalues.shape != gmm_eigenvalues.shape:
+            warnings.warn(
+                f"Diffusion and GMM eigenvalues shapes do not match for class {class_name} \n"
+                f"Diffusion shape: {diffusion_eigenvalues.shape}, GMM shape: {gmm_eigenvalues.shape}"
+            )
+        # Combine all eigenvalues for bin calculation
+        combined_eigenvalues = np.concatenate([diffusion_eigenvalues, gmm_eigenvalues])
+        bins = np.histogram_bin_edges(combined_eigenvalues, bins=n_bins)
+
+        # Plot diffusion eigenvalues
+        ax.hist(
+            diffusion_eigenvalues,
+            bins=bins,
+            density=True,
+            alpha=0.5,
+            label="Diffusion",
+        )
+
+        # Plot GMM eigenvalues
+        ax.hist(
+            gmm_eigenvalues,
+            bins=bins,
+            density=True,
+            alpha=0.5,
+            label="GMM",
+        )
+
+        ax.set_title(class_name.replace("_", " "))
+        ax.set_ylabel(r"Density ($\log$ scale)")
+        ax.set_yscale("log")
+        ax.grid(False)
+        ax.legend()
+        ax.set_xlabel("Eigenvalue")
+
+    # Hide any unused subplots
+    for ax in axes[len(diffusion_paths) :]:
+        ax.set_visible(False)
+
+    plt.tight_layout()
+    plt.savefig(save_path, bbox_inches="tight")
+    print("Saved histogram to ", save_path)
+
+
 if __name__ == "__main__":
+    data_dir = "results/gram_spectrum"
+    dataset_name = "Imagenet64"
+    # class_list = [
+    #     "baseball",
+    #     "cauliflower",
+    #     "church",
+    #     "coral reef",
+    #     "english springer",
+    #     "french horn",
+    #     "garbage truck",
+    #     "goldfinch",
+    #     "kimono",
+    #     "mountain bike",
+    #     "patas monkey",
+    #     "pizza",
+    #     "planetarium",
+    #     "polaroid",
+    #     "racer",
+    #     "salamandra",
+    #     "tabby",
+    #     "tench",
+    #     "trimaran",
+    #     "volcano",
+    # ]
+    class_list = [
+        "baseball",
+        "church",
+        "english springer",
+        "french horn",
+        "garbage truck",
+        "goldfinch",
+        "kimono",
+        "salamandra",
+        "tabby",
+        "tench",
+    ]
+    class_names_diffusion = [
+        f"{dataset_name}_{class_name}_edm_gram_spectrum.npy"
+        for class_name in class_list
+    ]
+    class_names_gmm = [
+        f"{dataset_name}_{class_name}_gmm_gram_spectrum.npy"
+        for class_name in class_list
+    ]
+    all_diffusion_paths = {
+        class_name: os.path.join(data_dir, path)
+        for class_name, path in zip(class_list, class_names_diffusion)
+    }
+    all_gmm_paths = {
+        class_name: os.path.join(data_dir, path)
+        for class_name, path in zip(class_list, class_names_gmm)
+    }
+    plot_spectra_from_multiple_npy(
+        diffusion_paths=all_diffusion_paths,
+        gmm_paths=all_gmm_paths,
+        n_bins=100,
+        num_cols=2,
+        save_dir="final_plots",
+        save_name="all_spectra_combined",
+    )
+
+    exit()
     parser = argparse.ArgumentParser()
     parser.add_argument("--real_path", type=str, default=None)
     parser.add_argument("--gmm_path", type=str, default=None)

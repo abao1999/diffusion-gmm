@@ -2,8 +2,64 @@ import os
 import warnings
 from typing import Callable, Optional, Tuple
 
+import matplotlib.pyplot as plt
 import numpy as np
+from cycler import cycler
 from PIL import Image
+
+# Define the style
+plt.rcParams.update(
+    {
+        # Font and text size
+        "font.serif": ["Computer Modern Roman"],
+        "font.size": 10,
+        "axes.titlesize": 12,
+        "axes.labelsize": 10,
+        "xtick.labelsize": 8,
+        "ytick.labelsize": 8,
+        "legend.fontsize": 8,
+        "legend.title_fontsize": 9,
+        # Axes style
+        "axes.linewidth": 0.75,
+        "axes.grid": False,
+        "grid.color": "gray",
+        "grid.linewidth": 0.5,
+        "grid.alpha": 0.5,
+        # Lines and markers
+        "lines.linewidth": 1.5,
+        "lines.markersize": 5,
+        "axes.prop_cycle": cycler(
+            "color",
+            [
+                "#377eb8",
+                "#ff7f0e",
+                "#4daf4a",
+                "#9467bd",
+                "#8c564b",
+                "#e377c2",
+            ],
+        ),
+        # Ticks
+        "xtick.major.size": 4,
+        "xtick.minor.size": 2,
+        "ytick.major.size": 4,
+        "ytick.minor.size": 2,
+        "xtick.direction": "in",
+        "ytick.direction": "in",
+        # Figure layout
+        "figure.figsize": (3.25, 2.5),  # Inches (adjust based on your needs)
+        "figure.dpi": 300,
+        "figure.autolayout": True,
+        # Legend
+        "legend.loc": "upper right",
+        "legend.frameon": False,
+        # Savefig options
+        "savefig.dpi": 300,
+        "savefig.format": "pdf",
+        "savefig.transparent": True,
+    }
+)
+plt.style.use("ggplot")
 
 
 def save_images_grid(

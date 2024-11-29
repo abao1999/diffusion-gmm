@@ -1,4 +1,5 @@
 import logging
+import os
 import warnings
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Type, Union
@@ -190,12 +191,10 @@ class ClassifierExperiment:
             self.device = torch.device("cpu")
             print("CUDA is not available. Using CPU instead.")
         print("device: ", self.device)
-        print("current device: ", torch.cuda.current_device())
 
         self.criterion = self.criterion_class()
 
         self.use_one_hot_enc = False
-        # if self.model_class in [LinearBinaryClassifier, TwoLayerBinaryClassifier]:
         if len(self.class_list) == 2:
             # BCELoss and MSELoss require labels to be floats (same type as output)
             # Furthermore, predictions are made by rounding scalar, rather than taking torch.max
@@ -378,15 +377,21 @@ class ClassifierExperiment:
         n_train_per_class_schedule: Sequence[int],
         n_test_samples_per_class: int,
         num_epochs: int = 20,
-        early_stopping_patience: int = 50,
+        eval_epoch_interval: int = 50,
+        early_stopping_patience: int = 100,
         batch_size: int = 64,
         dataloader_kwargs: Optional[Dict[str, Any]] = None,
+        model_save_dir: Optional[str] = None,
+        model_save_name: Optional[str] = None,
         verbose: bool = False,
-        log_every_n_epochs: int = 50,
     ) -> List[Dict[str, Any]]:
         """
         Run the classifier experiment
         """
+        if early_stopping_patience < eval_epoch_interval:
+            raise ValueError(
+                "early_stopping_patience must be greater than or equal to eval_epoch_interval"
+            )
         test_loader = self._build_dataloader(
             test_subset,
             batch_size=batch_size,
@@ -425,46 +430,56 @@ class ClassifierExperiment:
 
             best_test_loss = float("inf")
             early_stopping_counter = 0
-            patience = early_stopping_patience
 
             for epoch in tqdm(range(num_epochs), desc="Training"):
                 train_loss = self.train(train_loader)
-                test_loss, accuracy = self.evaluate(test_loader)
+                if epoch % eval_epoch_interval == 0 or epoch == num_epochs - 1:
+                    test_loss, accuracy = self.evaluate(test_loader)
+                    if verbose:
+                        logger.info(
+                            "Epoch %d, Train Loss: %f, Test Loss: %f, Accuracy: %f%%",
+                            epoch,
+                            train_loss,
+                            test_loss,
+                            accuracy * 100,
+                        )
+                        logger.info(
+                            f"learning rate: {self.optimizer.param_groups[0]['lr']}"
+                        )
 
-                if test_loss < best_test_loss:
-                    best_test_loss = test_loss
-                    results[i] = {
-                        "num_train_samples": len(train_loader.dataset),  # type: ignore
-                        "train_loss": train_loss,
-                        "test_loss": test_loss,
-                        "accuracy": accuracy,
-                        "epoch": epoch,
-                    }
-                    early_stopping_counter = 0  # Reset counter if improvement
-                else:
-                    early_stopping_counter += 1
+                    if test_loss < best_test_loss:
+                        best_test_loss = test_loss
+                        results[i] = {
+                            "num_train_samples": len(train_loader.dataset),  # type: ignore
+                            "train_loss": train_loss,
+                            "test_loss": test_loss,
+                            "accuracy": accuracy,
+                            "epoch": epoch,
+                        }
+                        early_stopping_counter = 0  # Reset counter if improvement
+                    else:
+                        early_stopping_counter += eval_epoch_interval
 
-                if early_stopping_counter >= patience:
-                    logger.info("Early stopping triggered at epoch %d", epoch)
-                    break
+                    if early_stopping_counter >= early_stopping_patience:
+                        logger.info("Early stopping triggered at epoch %d", epoch)
+                        break
 
                 if self.scheduler is not None:
                     self.scheduler.step()
 
-                should_log = verbose and (
-                    epoch % log_every_n_epochs == 0 or epoch == num_epochs - 1
+            if model_save_dir is not None:
+                model_save_name = f"n{n_train_per_class}_c{len(self.class_list)}.pth"
+                model_save_path = os.path.join(model_save_dir, model_save_name)
+                logger.info(f"Saving model to {model_save_path}")
+                os.makedirs(model_save_dir, exist_ok=True)
+                torch.save(
+                    {
+                        "best_test_loss": best_test_loss,
+                        "last_epoch": epoch,
+                        "model_state_dict": self.model.state_dict(),
+                        "optimizer_state_dict": self.optimizer.state_dict(),
+                    },
+                    model_save_path,
                 )
-                if should_log:
-                    logger.info(
-                        "Epoch [%d/%d], Train Loss: %f, Test Loss: %f, Accuracy: %f%%",
-                        epoch + 1,
-                        num_epochs,
-                        train_loss,
-                        test_loss,
-                        accuracy * 100,
-                    )
-                    logger.info(
-                        "Learning rate: %f", self.optimizer.param_groups[0]["lr"]
-                    )
 
         return results

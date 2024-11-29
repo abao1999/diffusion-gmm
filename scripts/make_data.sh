@@ -1,14 +1,22 @@
 main_dir=$(dirname "$(dirname "$0")")
 data_dir=$WORK/vision_datasets
 n_samples_fit=10240
-n_samples_generate=1600
-sample_idx=6400
+n_samples_generate=8000
+sample_idx=0
+
 dataset_name="edm_imagenet64_all"
-save_dataset_name="gmm_edm_imagenet64_test"
-save_dir=$data_dir/$save_dataset_name
+gmm_dataset_name="gmm_$dataset_name"
+
+save_dir=$data_dir/$gmm_dataset_name
+# stats_save_dir=$data_dir/computed_stats/$dataset_name
+stats_save_dir=null
+echo $save_dir
+echo $stats_save_dir
+
 rseed=81
 
-class_list=("tench" "church" "english_springer" "french_horn")
+# class_list=("baseball" "garbage_truck" "kimono" "tabby" "goldfinch" "salamandra")
+class_list=("patas_monkey" "racer" "planetarium" "trimaran" "volcano" "polaroid" "mountain_bike" "pizza" "coral_reef" "cauliflower")
 
 for i in "${!class_list[@]}"; do
     class_name=${class_list[i]}
@@ -26,6 +34,7 @@ for i in "${!class_list[@]}"; do
         gmm.n_samples_fit=$n_samples_fit \
         gmm.n_samples_generate=$n_samples_generate \
         gmm.save_dir=$save_dir/$class_name \
+        gmm.stats_save_dir=$stats_save_dir \
         gmm.sample_idx=$sample_idx \
         rseed=$rseed
 done

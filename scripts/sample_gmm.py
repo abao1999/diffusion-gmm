@@ -1,6 +1,8 @@
 import logging
+import os
 
 import hydra
+import numpy as np
 import torchvision.transforms as transforms
 
 from diffusion_gmm.image_gmm import ImageGMM
@@ -39,6 +41,22 @@ def main(cfg):
     class_stats = gmm.compute_mean_and_covariance(
         num_samples_per_class=cfg.gmm.n_samples_fit,
     )
+
+    if cfg.gmm.stats_save_dir is not None:
+        os.makedirs(cfg.gmm.stats_save_dir, exist_ok=True)
+        for class_name, stats in class_stats.items():
+            mean = stats["mean"]
+            covariance = stats["covariance"]
+            np.save(
+                os.path.join(cfg.gmm.stats_save_dir, f"{class_name}_mean.npy"), mean
+            )
+            np.save(
+                os.path.join(cfg.gmm.stats_save_dir, f"{class_name}_covariance.npy"),
+                covariance,
+            )
+            logger.info(
+                f"Saved {class_name} mean and covariance to {cfg.gmm.stats_save_dir}"
+            )
 
     gmm.sample_from_computed_stats(
         class_stats=class_stats,

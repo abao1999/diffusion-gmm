@@ -2,68 +2,48 @@
 main_dir=$(dirname "$(dirname "$0")")
 data_dir=$WORK/vision_datasets
 
-n_samples=6400
-target_class="church"
-dataset_name="CIFAR10"
+n_samples=8000
+class_list=("garbage_truck")
+dataset_name="Imagenet64"
 
-# Experiment for imagenet downsized to 64x64 (imagenet64)
+for class in "${class_list[@]}"; do
+        echo "Computing gram spectrum for class: $class"
+        python scripts/compute_gram_spectrum.py \
+                experiment.data_dir=$data_dir/edm_imagenet64_all \
+                experiment.batch_size=64 \
+                experiment.target_class=$class \
+                experiment.num_samples=$n_samples \
+                experiment.save_dir=results/gram_spectrum \
+                experiment.save_name=${dataset_name}_${class}_edm_gram_spectrum.npy \
 
-# # compute gram spectrum for imagenet64 class
-# python scripts/compute_gram_spectrum.py \
-#         experiment.data_dir=$data_dir/imagenette64 \
-#         experiment.batch_size=32 \
-#         experiment.target_class=$target_class \
-#         experiment.num_samples=$n_samples \
-#         experiment.save_dir=results/gram_spectrum \
-#         experiment.save_name=imagenet64_${target_class}_gram_spectrum.npy \
+        python scripts/compute_gram_spectrum.py \
+                experiment.data_dir=$data_dir/gmm_edm_imagenet64_all \
+                experiment.load_npy=true \
+                experiment.batch_size=64 \
+                experiment.target_class=$class \
+                experiment.num_samples=$n_samples \
+                experiment.save_dir=results/gram_spectrum \
+                experiment.save_name=${dataset_name}_${class}_gmm_gram_spectrum.npy \
 
-# # compute gram spectrum for imagenet64 class gmm samples
-# python scripts/compute_gram_spectrum.py \
-#         experiment.data_dir=$data_dir/gmm_imagenet64 \
-#         experiment.load_npy=true \
-#         experiment.batch_size=32 \
-#         experiment.target_class=$target_class \
-#         experiment.num_samples=$n_samples \
-#         experiment.save_dir=results/gram_spectrum \
-#         experiment.save_name=imagenet64_${target_class}_gmm_gram_spectrum.npy \
+done
 
-# # compute gram spectrum for imagenet64 class diffusion samples
-# python scripts/compute_gram_spectrum.py \
-#         experiment.data_dir=$data_dir/edm_imagenet64_train \
-#         experiment.batch_size=32 \
-#         experiment.target_class=$target_class \
-#         experiment.num_samples=$n_samples \
-#         experiment.save_dir=results/gram_spectrum \
-#         experiment.save_name=${dataset_name}_${target_class}_edm_gram_spectrum.npy \
+        # python scripts/plot_spectra.py \
+        #         --real_path None \
+        #         --gmm_path results/gram_spectrum/${dataset_name}_${class}_gmm_gram_spectrum.npy \
+        #         --diffusion_path results/gram_spectrum/${dataset_name}_${class}_edm_gram_spectrum.npy \
+        #         --dataset_name $dataset_name \
+        #         --class_name $class \
+        #         --save_dir final_plots/gram_spectrum \
+        #         --save_name ${dataset_name}_${class}_spectra
 
-# # compute gram spectrum for imagenet64 class gmm samples
-# python scripts/compute_gram_spectrum.py \
-#         experiment.data_dir=$data_dir/gmm_edm_imagenet64_train \
-#         experiment.load_npy=true \
-#         experiment.batch_size=32 \
-#         experiment.target_class=$target_class \
-#         experiment.num_samples=$n_samples \
-#         experiment.save_dir=results/gram_spectrum \
-#         experiment.save_name=${dataset_name}_${target_class}_gmm_gram_spectrum.npy \
 
 # python scripts/plot_spectra.py \
 #         --real_path None \
-#         --gmm_path results/gram_spectrum/${dataset_name}_${target_class}_gmm_gram_spectrum.npy \
-#         --diffusion_path results/gram_spectrum/${dataset_name}_${target_class}_edm_gram_spectrum.npy \
+#         --gmm_path results/gram_spectrum/${dataset_name}_gmm_gram_spectrum.npy \
+#         --diffusion_path results/gram_spectrum/${dataset_name}_diffusion_gram_spectrum.npy \
 #         --dataset_name $dataset_name \
-#         --class_name $target_class \
 #         --save_dir final_plots/gram_spectrum \
-#         --save_name ${dataset_name}_${target_class}_spectra
-
-
-
-python scripts/plot_spectra.py \
-        --real_path None \
-        --gmm_path results/gram_spectrum/${dataset_name}_gmm_gram_spectrum.npy \
-        --diffusion_path results/gram_spectrum/${dataset_name}_diffusion_gram_spectrum.npy \
-        --dataset_name $dataset_name \
-        --save_dir final_plots/gram_spectrum \
-        --save_name ${dataset_name}_all_spectra
+#         --save_name ${dataset_name}_all_spectra
 
 
 # Experiment for cifar10

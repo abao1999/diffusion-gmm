@@ -12,6 +12,7 @@ gmm:
   n_samples_fit: 1024
   n_samples_generate: 1024
   save_dir: null
+  stats_save_dir: null
   verbose: true
 
 

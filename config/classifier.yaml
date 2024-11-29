@@ -19,10 +19,12 @@ classifier:
   resample_train_subset: false
   resample_test_subset: false
   reset_model_random_seed: false
-  early_stopping_patience: 50
+  eval_epoch_interval: 10
+  early_stopping_patience: 100
   verbose: false
   save_dir: results/classifier
   save_name: classifier
+  model_save_dir: null
   save_interval: 1
 
   criterion: MSELoss
