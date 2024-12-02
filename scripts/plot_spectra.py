@@ -156,12 +156,13 @@ def plot_spectra_from_multiple_npy(
     num_cols: int = 4,
     save_dir: str = "figs",
     save_name: str = "all_spectra_combined",
+    scale_factor: Optional[float] = None,
 ):
     """
     Plot spectra of Gram matrices from multiple diffusion and GMM paths.
     """
     os.makedirs(save_dir, exist_ok=True)
-    save_path = os.path.join(save_dir, f"{save_name}.pdf")
+    save_path = os.path.join(save_dir, f"{save_name}.png")
 
     num_classes = len(diffusion_paths)
     # Determine the number of rows and columns for the grid
@@ -185,6 +186,16 @@ def plot_spectra_from_multiple_npy(
                 f"Diffusion and GMM eigenvalues shapes do not match for class {class_name} \n"
                 f"Diffusion shape: {diffusion_eigenvalues.shape}, GMM shape: {gmm_eigenvalues.shape}"
             )
+
+        if scale_factor is not None:
+            diffusion_eigenvalues = diffusion_eigenvalues**scale_factor
+            gmm_eigenvalues = gmm_eigenvalues**scale_factor
+            xlabel = r"Scaled Eigenvalue $\lambda^{{{}}}$".format(scale_factor)
+            # diffusion_eigenvalues = np.log(diffusion_eigenvalues + 1)
+            # gmm_eigenvalues = np.log(gmm_eigenvalues + 1)
+            # xlabel = r"Log Eigenvalue $\log(\lambda + 1)$"
+        else:
+            xlabel = r"Eigenvalue $\lambda$"
         # Combine all eigenvalues for bin calculation
         combined_eigenvalues = np.concatenate([diffusion_eigenvalues, gmm_eigenvalues])
         bins = np.histogram_bin_edges(combined_eigenvalues, bins=n_bins)
@@ -212,7 +223,7 @@ def plot_spectra_from_multiple_npy(
         ax.set_yscale("log")
         ax.grid(False)
         ax.legend()
-        ax.set_xlabel("Eigenvalue")
+        ax.set_xlabel(xlabel)
 
     # Hide any unused subplots
     for ax in axes[len(diffusion_paths) :]:
@@ -226,40 +237,40 @@ def plot_spectra_from_multiple_npy(
 if __name__ == "__main__":
     data_dir = "results/gram_spectrum"
     dataset_name = "Imagenet64"
-    # class_list = [
-    #     "baseball",
-    #     "cauliflower",
-    #     "church",
-    #     "coral reef",
-    #     "english springer",
-    #     "french horn",
-    #     "garbage truck",
-    #     "goldfinch",
-    #     "kimono",
-    #     "mountain bike",
-    #     "patas monkey",
-    #     "pizza",
-    #     "planetarium",
-    #     "polaroid",
-    #     "racer",
-    #     "salamandra",
-    #     "tabby",
-    #     "tench",
-    #     "trimaran",
-    #     "volcano",
-    # ]
     class_list = [
         "baseball",
+        "cauliflower",
         "church",
+        "coral reef",
         "english springer",
         "french horn",
         "garbage truck",
         "goldfinch",
         "kimono",
+        "mountain bike",
+        "patas monkey",
+        "pizza",
+        "planetarium",
+        "polaroid",
+        "racer",
         "salamandra",
         "tabby",
         "tench",
+        "trimaran",
+        "volcano",
     ]
+    # class_list = [
+    #     "baseball",
+    #     "church",
+    #     "english springer",
+    #     "french horn",
+    #     "garbage truck",
+    #     "goldfinch",
+    #     "kimono",
+    #     "salamandra",
+    #     "tabby",
+    #     "tench",
+    # ]
     class_names_diffusion = [
         f"{dataset_name}_{class_name}_edm_gram_spectrum.npy"
         for class_name in class_list
@@ -280,9 +291,10 @@ if __name__ == "__main__":
         diffusion_paths=all_diffusion_paths,
         gmm_paths=all_gmm_paths,
         n_bins=100,
-        num_cols=2,
+        num_cols=4,
         save_dir="final_plots",
         save_name="all_spectra_combined",
+        scale_factor=None,
     )
 
     exit()

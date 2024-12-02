@@ -15,14 +15,15 @@ from diffusion_gmm.base import ImageExperiment
 class GramSpectrumExperiment(ImageExperiment):
     def __post_init__(self):
         super().__post_init__()
+        self.batch_size = 64
 
     @staticmethod
     def compute_gram_matrix(features: np.ndarray) -> np.ndarray:
         b, c, h, w = features.shape
+        # features = features.reshape(b, c * h * w)
+        # gram_matrix = np.matmul(features.transpose(1, 0), features)
         features = features.reshape(b, c, h * w)
         gram_matrix = np.matmul(features, features.transpose(0, 2, 1))
-        # features = features.view(b, c, h * w)
-        # gram_matrix = torch.bmm(features, features.transpose(1, 2))
         return gram_matrix
 
     @staticmethod
@@ -49,6 +50,7 @@ class GramSpectrumExperiment(ImageExperiment):
             data = images.squeeze().cpu().numpy()
             print("data shape: ", data.shape)
             gram_matrix = self.compute_gram_matrix(data)
+            breakpoint()
             spectrum = self.get_gram_spectrum(gram_matrix)
             all_eigenvalues.extend(spectrum)
             unique_labels.update(labels.cpu().numpy())

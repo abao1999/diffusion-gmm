@@ -205,11 +205,11 @@ def plot_quantity(
     markers = ["o", "s", "D", "v", "^", "<", ">", "p", "*", "h", "H", "X", "D", "d"]
     for i, (run_name, quantity_dict) in enumerate(results.items()):
         print(f"Processing {run_name}")
-        n_runs = len(quantity_dict)
-        assert n_runs == len(
+        num_train_splits = len(quantity_dict)
+        assert num_train_splits == len(
             quantity_dict
         ), "Number of runs must match number of quantities"
-        print("n_runs: ", n_runs)
+        print("num_train_splits: ", num_train_splits)
 
         num_samples_list = list(quantity_dict.keys())
         num_samples_per_class_list = [x // num_classes for x in num_samples_list]
@@ -217,10 +217,12 @@ def plot_quantity(
         num_samples_per_class_list, quantity_history_list = zip(
             *sorted(zip(num_samples_per_class_list, quantity_history_list))
         )
-        # # Pad the lists with NaN to handle inhomogeneous shapes
-        # padded_values = list(zip_longest(*quantity_dict.values(), fillvalue=np.nan))
-        # mean_quantities_list = np.nanmean(padded_values, axis=1)
-        # std_quantities_list = np.nanstd(padded_values, axis=1)
+        for num_samples_per_class, quantities in zip(
+            num_samples_per_class_list, quantity_history_list
+        ):
+            print(
+                f"{len(quantities)} runs for {num_samples_per_class} samples per class"
+            )
         mean_quantities_list = np.array(
             [np.mean(quantities) for quantities in quantity_history_list]
         )
@@ -444,12 +446,22 @@ if __name__ == "__main__":
     #     ],
     # }
 
-    model_name = "LinearMulticlassClassifier"
-    json_dir = f"results/classifier/{model_name}"
+    # model_name = "LinearMulticlassClassifier"
+    # # run_name = "20_classes"
     # class_list = ["church", "tench", "english_springer", "french_horn"]
     # run_name = "-".join(class_list)
     # print(run_name)
-    run_name = "20_classes"
+
+    model_name = "LinearBinaryClassifier"
+    # class_list = ["church", "tench"]
+    # class_list = ["racer", "mountain_bike"]
+    # class_list = ["kimono", "coral_reef"]
+    class_list = ["garbage_truck", "polaroid"]
+
+    run_name = "-".join(class_list)
+    print(run_name)
+
+    json_dir = f"results/classifier/{model_name}"
 
     run_json_paths = {
         "Diffusion": glob.glob(
@@ -463,8 +475,8 @@ if __name__ == "__main__":
     save_name = f"{model_name}_{run_name}"
     plot_results(
         run_json_paths,
-        num_classes=10,
-        title="Linear Multiclass Classifier",
+        num_classes=2,
+        title="Linear Classifier",
         save_dir="final_plots/classifier",
         save_name=save_name,
         twin_plot=False,

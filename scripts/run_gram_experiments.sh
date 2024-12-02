@@ -2,8 +2,8 @@
 main_dir=$(dirname "$(dirname "$0")")
 data_dir=$WORK/vision_datasets
 
-n_samples=8000
-class_list=("garbage_truck")
+n_samples=2000
+class_list=("english_springer")
 dataset_name="Imagenet64"
 
 for class in "${class_list[@]}"; do

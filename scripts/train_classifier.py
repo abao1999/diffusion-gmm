@@ -94,10 +94,14 @@ def main(cfg):
         verbose=cfg.classifier.verbose,
     )
 
-    n_train_per_class_schedule = (
-        np.linspace(1.0, 0.05, cfg.classifier.n_props_train)
-        * cfg.classifier.n_train_samples_per_class
+    # n_train_per_class_schedule = (
+    #     np.linspace(1.0, 0.05, cfg.classifier.n_props_train)
+    #     * cfg.classifier.n_train_samples_per_class
+    # ).astype(int)
+    n_train_per_class_schedule = np.array(
+        [2048, 1658, 1269, 880, 491, 256, 102]
     ).astype(int)
+    # n_train_per_class_schedule = np.array([4096, 3072]).astype(int)
     print(n_train_per_class_schedule)
 
     save_dir = os.path.join(cfg.classifier.save_dir, cfg.classifier.model.name)

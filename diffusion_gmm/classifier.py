@@ -338,10 +338,13 @@ class ClassifierExperiment:
             prop_to_use = n_samples_to_use / len(subset)
             selected_indices = []
             for class_idx, indices in class_to_indices.items():
-                if rng is not None:
-                    rng.shuffle(indices)
                 subset_size = int(len(indices) * prop_to_use)
-                selected_indices.extend(indices[:subset_size])
+                if rng is not None:
+                    selected_indices.extend(
+                        rng.choice(indices, subset_size, replace=False)
+                    )
+                else:
+                    selected_indices.extend(indices[:subset_size])
 
             selected_subset = MultiClassSubset(
                 Subset(dataset, selected_indices),
@@ -462,6 +465,7 @@ class ClassifierExperiment:
 
                     if early_stopping_counter >= early_stopping_patience:
                         logger.info("Early stopping triggered at epoch %d", epoch)
+                        logger.info(f"Best test loss: {best_test_loss}")
                         break
 
                 if self.scheduler is not None:
