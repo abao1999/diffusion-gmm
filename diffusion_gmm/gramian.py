@@ -20,9 +20,7 @@ class GramSpectrumExperiment(ImageExperiment):
     @staticmethod
     def compute_gram_matrix(features: np.ndarray) -> np.ndarray:
         b, c, h, w = features.shape
-        # features = features.reshape(b, c * h * w)
-        # gram_matrix = np.matmul(features.transpose(1, 0), features)
-        features = features.reshape(b, c, h * w)
+        features = features.reshape(b, 1, -1)
         gram_matrix = np.matmul(features, features.transpose(0, 2, 1))
         return gram_matrix
 

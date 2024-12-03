@@ -29,26 +29,30 @@ def create_image_grid(
         sample = Image.open(next(iter(image_paths.values()))[0])
         w, h = sample.size
         # Calculate the number of blocks needed per class
-        block_size = 3
-        n_blocks_per_row = 2
+        block_size = (1, 3)
+        n_blocks_per_row = 4
+        # Calculate the total number of rows needed
+        total_rows = (
+            num_classes * block_size[0] + n_blocks_per_row - 1
+        ) // n_blocks_per_row
         # Create a new RGB image to paste the images onto
         new_im = Image.new(
             "RGB",
             (
-                block_size * w * n_blocks_per_row,
-                block_size * h * num_classes // n_blocks_per_row,
+                block_size[1] * w * n_blocks_per_row,
+                total_rows * h,
             ),
         )
 
         for class_idx, (class_name, paths) in enumerate(image_paths.items()):
-            for img_idx, img_path in enumerate(paths[: block_size**2]):
+            for img_idx, img_path in enumerate(paths[: block_size[0] * block_size[1]]):
                 img = Image.open(img_path)
-                # Calculate position to paste the image in a 3x3 block
-                block_row = img_idx // block_size
-                block_col = img_idx % block_size
+                # Calculate position to paste the image in a block
+                block_row = img_idx // block_size[1]
+                block_col = img_idx % block_size[1]
                 # Calculate the position based on the class index and block position
-                i = ((class_idx // n_blocks_per_row) * block_size + block_row) * h
-                j = ((class_idx % n_blocks_per_row) * block_size + block_col) * w
+                i = ((class_idx // n_blocks_per_row) * block_size[0] + block_row) * h
+                j = ((class_idx % n_blocks_per_row) * block_size[1] + block_col) * w
                 new_im.paste(img, (j, i))
         print(f"Saving grid image to {save_path}")
         new_im.save(save_path)
@@ -79,13 +83,38 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--data_split", type=str, required=True)
     parser.add_argument("--target_classes", type=str, nargs="+", required=True)
-    parser.add_argument("--num_samples_per_class", type=int, default=9)
+    parser.add_argument("--num_samples_per_class", type=int, default=3)
     parser.add_argument("--save_dir", type=str, default="final_plots")
     args = parser.parse_args()
 
+    if args.target_classes == ["all"]:
+        class_list = [
+            "baseball",
+            "cauliflower",
+            "church",
+            "coral_reef",
+            "english_springer",
+            "french_horn",
+            "garbage_truck",
+            "goldfinch",
+            "kimono",
+            "mountain_bike",
+            "patas_monkey",
+            "pizza",
+            "planetarium",
+            "polaroid",
+            "racer",
+            "salamandra",
+            "tabby",
+            "tench",
+            "trimaran",
+            "volcano",
+        ]
+    else:
+        class_list = args.target_classes
     data_dir = os.path.join(DATA_DIR, args.data_split)
 
-    class_names = "-".join(args.target_classes)
+    class_names = "-".join(class_list)
     image_paths = {
         class_name: random.sample(
             [
@@ -94,7 +123,7 @@ if __name__ == "__main__":
             ],
             args.num_samples_per_class,
         )
-        for class_name in args.target_classes
+        for class_name in class_list
     }
     print(image_paths)
     save_path = os.path.join(args.save_dir, f"{args.data_split}_{class_names}_grid.pdf")

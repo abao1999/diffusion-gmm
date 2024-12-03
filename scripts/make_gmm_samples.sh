@@ -15,16 +15,10 @@ echo $stats_save_dir
 
 rseed=81
 
-# class_list=("baseball" "garbage_truck" "kimono" "tabby" "goldfinch" "salamandra")
 class_list=("patas_monkey" "racer" "planetarium" "trimaran" "volcano" "polaroid" "mountain_bike" "pizza" "coral_reef" "cauliflower")
 
 for i in "${!class_list[@]}"; do
     class_name=${class_list[i]}
-    # read -p "Fit GMM on $n_samples_fit samples from '$dataset_name' class $class_name and save $n_samples_generate samples to '$save_dataset_name'? (y/n): " confirmation
-    # if [[ "$confirmation" != "y" ]]; then
-    #     echo "Generation aborted."
-    #     exit 1
-    # fi
     python scripts/sample_gmm.py \
         gmm.n_components=1 \
         gmm.data_dir=$data_dir/$dataset_name \

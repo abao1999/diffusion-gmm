@@ -26,18 +26,12 @@ class MultiClassSubset(Dataset):
         self.subset = subset
         self.class_to_index = class_to_index
         self.num_classes = len(class_to_index)
-        # self.use_one_hot_enc = use_one_hot_enc
         self.device = device
 
     def __getitem__(self, index):
         data, target = self.subset[index]
         label = self.class_to_index[target]
 
-        # if self.use_one_hot_enc:
-        #     # Create a one-hot encoded tensor
-        #     one_hot_label = torch.zeros(self.num_classes, device=self.device)
-        #     one_hot_label[label] = 1.0
-        #     return data.to(self.device), one_hot_label
         return data.to(self.device), torch.tensor(label, dtype=torch.float).to(
             self.device
         )

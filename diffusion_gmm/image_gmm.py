@@ -126,7 +126,7 @@ class ImageGMM(GaussianMixture):
 
         return class_stats
 
-    def save_samples(
+    def sample_and_save(
         self,
         n_samples: int,
         save_dir: str,
@@ -205,5 +205,5 @@ class ImageGMM(GaussianMixture):
                     os.path.join(save_dir, f"sample_{i:06d}.npy")
                     for i in range(start_idx, end_idx)
                 ]
-                for img, save_path in zip(batch_samples, batch_save_paths):
+                for img, save_path in zip(batch_samples, batch_save_paths):  # type: ignore
                     np.save(save_path, img)

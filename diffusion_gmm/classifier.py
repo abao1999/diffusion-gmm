@@ -23,7 +23,6 @@ from diffusion_gmm.utils import get_targets
 logger = logging.getLogger(__name__)
 
 
-# Define a simple linear multiclass classifier
 class LinearMulticlassClassifier(nn.Module):
     """
     Simple linear multiclass classifier
@@ -38,7 +37,6 @@ class LinearMulticlassClassifier(nn.Module):
         return F.softmax(self.fc(x), dim=1)
 
 
-# Define a fully connected two-layer network for multiclass classification
 class TwoLayerMulticlassClassifier(nn.Module):
     """
     Two-layer fully connected multiclass classifier
@@ -56,7 +54,6 @@ class TwoLayerMulticlassClassifier(nn.Module):
         return F.softmax(self.fc2(x), dim=1)  # Second layer with Softmax activation
 
 
-# Define a simple linear classifier
 class LinearBinaryClassifier(nn.Module):
     """
     Simple linear binary classifier
@@ -85,7 +82,6 @@ class LinearBinaryClassifier(nn.Module):
             return torch.sigmoid(self.fc(x))
 
 
-# Define a two-layer fully connected binary classifier
 class TwoLayerBinaryClassifier(nn.Module):
     """
     Two-layer fully connected binary classifier

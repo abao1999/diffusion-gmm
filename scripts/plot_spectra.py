@@ -5,61 +5,8 @@ from typing import Dict, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
-from cycler import cycler
 
-# Define the style
-plt.rcParams.update(
-    {
-        # Font and text size
-        "font.serif": ["Computer Modern Roman"],
-        "font.size": 10,
-        "axes.titlesize": 12,
-        "axes.labelsize": 10,
-        "xtick.labelsize": 8,
-        "ytick.labelsize": 8,
-        "legend.fontsize": 8,
-        "legend.title_fontsize": 9,
-        # Axes style
-        "axes.linewidth": 0.75,
-        "axes.grid": False,
-        "grid.color": "gray",
-        "grid.linewidth": 0.5,
-        "grid.alpha": 0.5,
-        # Lines and markers
-        "lines.linewidth": 1.5,
-        "lines.markersize": 5,
-        "axes.prop_cycle": cycler(
-            "color",
-            [
-                "#377eb8",
-                "#ff7f0e",
-                "#4daf4a",
-                "#9467bd",
-                "#8c564b",
-                "#e377c2",
-            ],
-        ),
-        # Ticks
-        "xtick.major.size": 4,
-        "xtick.minor.size": 2,
-        "ytick.major.size": 4,
-        "ytick.minor.size": 2,
-        "xtick.direction": "in",
-        "ytick.direction": "in",
-        # Figure layout
-        "figure.figsize": (3.25, 2.5),  # Inches (adjust based on your needs)
-        "figure.dpi": 300,
-        "figure.autolayout": True,
-        # Legend
-        "legend.loc": "upper right",
-        "legend.frameon": False,
-        # Savefig options
-        "savefig.dpi": 300,
-        "savefig.format": "pdf",
-        "savefig.transparent": True,
-    }
-)
-plt.style.use("ggplot")
+plt.style.use(["custom_style.mplstyle", "ggplot"])
 
 
 def plot_spectra_from_npy(
@@ -175,11 +122,11 @@ def plot_spectra_from_multiple_npy(
 
     for ax, (class_name, diff_path) in zip(axes, diffusion_paths.items()):
         if os.path.isfile(diff_path):
-            diffusion_eigenvalues = np.load(diff_path)
+            diffusion_eigenvalues: np.ndarray = np.load(diff_path)
 
         gmm_path = gmm_paths[class_name]
         if os.path.isfile(gmm_path):
-            gmm_eigenvalues = np.load(gmm_path)
+            gmm_eigenvalues: np.ndarray = np.load(gmm_path)
 
         if diffusion_eigenvalues.shape != gmm_eigenvalues.shape:
             warnings.warn(
@@ -188,14 +135,12 @@ def plot_spectra_from_multiple_npy(
             )
 
         if scale_factor is not None:
-            diffusion_eigenvalues = diffusion_eigenvalues**scale_factor
-            gmm_eigenvalues = gmm_eigenvalues**scale_factor
+            diffusion_eigenvalues = diffusion_eigenvalues**scale_factor  # type: ignore
+            gmm_eigenvalues = gmm_eigenvalues**scale_factor  # type: ignore
             xlabel = r"Scaled Eigenvalue $\lambda^{{{}}}$".format(scale_factor)
-            # diffusion_eigenvalues = np.log(diffusion_eigenvalues + 1)
-            # gmm_eigenvalues = np.log(gmm_eigenvalues + 1)
-            # xlabel = r"Log Eigenvalue $\log(\lambda + 1)$"
         else:
             xlabel = r"Eigenvalue $\lambda$"
+
         # Combine all eigenvalues for bin calculation
         combined_eigenvalues = np.concatenate([diffusion_eigenvalues, gmm_eigenvalues])
         bins = np.histogram_bin_edges(combined_eigenvalues, bins=n_bins)
@@ -235,69 +180,6 @@ def plot_spectra_from_multiple_npy(
 
 
 if __name__ == "__main__":
-    data_dir = "results/gram_spectrum"
-    dataset_name = "Imagenet64"
-    class_list = [
-        "baseball",
-        "cauliflower",
-        "church",
-        "coral reef",
-        "english springer",
-        "french horn",
-        "garbage truck",
-        "goldfinch",
-        "kimono",
-        "mountain bike",
-        "patas monkey",
-        "pizza",
-        "planetarium",
-        "polaroid",
-        "racer",
-        "salamandra",
-        "tabby",
-        "tench",
-        "trimaran",
-        "volcano",
-    ]
-    # class_list = [
-    #     "baseball",
-    #     "church",
-    #     "english springer",
-    #     "french horn",
-    #     "garbage truck",
-    #     "goldfinch",
-    #     "kimono",
-    #     "salamandra",
-    #     "tabby",
-    #     "tench",
-    # ]
-    class_names_diffusion = [
-        f"{dataset_name}_{class_name}_edm_gram_spectrum.npy"
-        for class_name in class_list
-    ]
-    class_names_gmm = [
-        f"{dataset_name}_{class_name}_gmm_gram_spectrum.npy"
-        for class_name in class_list
-    ]
-    all_diffusion_paths = {
-        class_name: os.path.join(data_dir, path)
-        for class_name, path in zip(class_list, class_names_diffusion)
-    }
-    all_gmm_paths = {
-        class_name: os.path.join(data_dir, path)
-        for class_name, path in zip(class_list, class_names_gmm)
-    }
-    plot_spectra_from_multiple_npy(
-        diffusion_paths=all_diffusion_paths,
-        gmm_paths=all_gmm_paths,
-        n_bins=100,
-        num_cols=4,
-        save_dir="final_plots",
-        save_name="all_spectra_combined",
-        scale_factor=None,
-    )
-
-    exit()
     parser = argparse.ArgumentParser()
     parser.add_argument("--real_path", type=str, default=None)
     parser.add_argument("--gmm_path", type=str, default=None)
@@ -320,3 +202,43 @@ if __name__ == "__main__":
         save_dir=args.save_dir,
         save_name=args.save_name,
     )
+
+    # data_dir = "results/gram_spectrum"
+    # dataset_name = "Imagenet64"
+    # class_list = [
+    #     "baseball",
+    #     "church",
+    #     "english springer",
+    #     "french horn",
+    #     "garbage truck",
+    #     "goldfinch",
+    #     "kimono",
+    #     "salamandra",
+    #     "tabby",
+    #     "tench",
+    # ]
+    # class_names_diffusion = [
+    #     f"{dataset_name}_{class_name}_edm_gram_spectrum.npy"
+    #     for class_name in class_list
+    # ]
+    # class_names_gmm = [
+    #     f"{dataset_name}_{class_name}_gmm_gram_spectrum.npy"
+    #     for class_name in class_list
+    # ]
+    # all_diffusion_paths = {
+    #     class_name: os.path.join(data_dir, path)
+    #     for class_name, path in zip(class_list, class_names_diffusion)
+    # }
+    # all_gmm_paths = {
+    #     class_name: os.path.join(data_dir, path)
+    #     for class_name, path in zip(class_list, class_names_gmm)
+    # }
+    # plot_spectra_from_multiple_npy(
+    #     diffusion_paths=all_diffusion_paths,
+    #     gmm_paths=all_gmm_paths,
+    #     n_bins=100,
+    #     num_cols=2,
+    #     save_dir="final_plots",
+    #     save_name="all_spectra_combined",
+    #     scale_factor=None,
+    # )

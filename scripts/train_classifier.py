@@ -98,16 +98,15 @@ def main(cfg):
     #     np.linspace(1.0, 0.05, cfg.classifier.n_props_train)
     #     * cfg.classifier.n_train_samples_per_class
     # ).astype(int)
-    n_train_per_class_schedule = np.array(
-        [2048, 1658, 1269, 880, 491, 256, 102]
-    ).astype(int)
-    # n_train_per_class_schedule = np.array([4096, 3072]).astype(int)
+    # n_train_per_class_schedule = np.array(
+    #     [2048, 1658, 1269, 880, 491, 256, 102]
+    # ).astype(int)
+    n_train_per_class_schedule = np.array([4096, 3072]).astype(int)
     print(n_train_per_class_schedule)
 
-    save_dir = os.path.join(cfg.classifier.save_dir, cfg.classifier.model.name)
-    os.makedirs(save_dir, exist_ok=True)
+    os.makedirs(cfg.classifier.save_dir, exist_ok=True)
     save_name = f"{cfg.classifier.save_name}.json"
-    results_file_path = os.path.join(save_dir, save_name)
+    results_file_path = os.path.join(cfg.classifier.save_dir, save_name)
 
     logger.info(
         f"Running classifier experiment, {cfg.classifier.class_list} classes, "
@@ -142,7 +141,7 @@ def main(cfg):
             train_subset=train_subset,
             test_subset=test_subset,
             rng=rng,
-            n_train_per_class_schedule=n_train_per_class_schedule,
+            n_train_per_class_schedule=n_train_per_class_schedule,  # type: ignore
             n_test_samples_per_class=cfg.classifier.n_test_samples_per_class,
             num_epochs=cfg.classifier.num_epochs,
             early_stopping_patience=cfg.classifier.early_stopping_patience,

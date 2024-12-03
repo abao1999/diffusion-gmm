@@ -1,23 +1,22 @@
-# Set variable to main (parent) directory
 main_dir=$(dirname "$(dirname "$0")")
 data_dir=$WORK/vision_datasets
 
 train_split=0.8 # set to 1.0 when using separate folder for test set
-n_runs=4
+n_runs=5
 n_props_train=6
 reset_model_random_seed=false
-save_dir=results/classifier
+results_save_dir=results/classifier
 num_epochs=500
 max_allowed_samples_per_class=8000
 max_allowed_samples_per_class_test=0
 n_train_samples_per_class=2048
 n_test_samples_per_class=1024
 batch_size=64
-lr=1e-2 # 3e-4
+lr=3e-3
 train_augmentations=None
 resample_train_subset=true
 resample_test_subset=true
-eval_epoch_interval=10
+eval_epoch_interval=5
 early_stopping_patience=60
 model_save_dir=$WORK/vision_datasets/checkpoints
 model_save_dir=null
@@ -27,13 +26,13 @@ criterion=MSELoss
 optimizer_class=SGD
 
 scheduler_class=CosineAnnealingLR
-verbose=false
+verbose=true
 
 datetime=$(date +%m-%d_%H-%M-%S)
 
 class_list=(
-    "garbage_truck"
-    "polaroid"
+    "english_springer"
+    "french_horn"
 )
 class_list_json=$(printf '%s\n' "${class_list[@]}" | jq -R . | jq -s -c .)
 echo $class_list_json
@@ -47,7 +46,7 @@ echo $run_name
 
 dataset_list=("edm_imagenet64" "gmm_edm_imagenet64")
 
-rseeds=(1000 1101 1011 234 567)
+rseeds=(132 310 930 1220)
 
 for rseed in "${rseeds[@]}"; do
     echo $rseed
@@ -80,13 +79,13 @@ for rseed in "${rseeds[@]}"; do
             classifier.eval_epoch_interval=$eval_epoch_interval \
             classifier.early_stopping_patience=$early_stopping_patience \
             classifier.model_save_dir=$model_save_dir \
-            classifier.save_dir=$save_dir \
+            classifier.save_dir=$results_save_dir/$model_class/$run_name \
             classifier.save_name=${dataset}_bs${batch_size}_${criterion}_${run_name}_${datetime}_seed${rseed} \
             classifier.device=cuda:${device_idx} \
             classifier.optimizer.name=$optimizer_class \
             classifier.scheduler.name=$scheduler_class \
             classifier.scheduler.CosineAnnealingLR_kwargs.T_max=$num_epochs \
-            classifier.scheduler.CosineAnnealingLR_kwargs.eta_min=1e-3 \
+            classifier.scheduler.CosineAnnealingLR_kwargs.eta_min=3e-5 \
             classifier.verbose=$verbose \
             rseed=$rseed
     done
