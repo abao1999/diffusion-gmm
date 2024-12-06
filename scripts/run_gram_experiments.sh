@@ -27,10 +27,10 @@ for class in "${class_list[@]}"; do
 
 done
 
-# python scripts/plot_spectra.py \
-#         --real_path None \
-#         --gmm_path results/gram_spectrum/${dataset_name}_gmm_gram_spectrum.npy \
-#         --diffusion_path results/gram_spectrum/${dataset_name}_diffusion_gram_spectrum.npy \
-#         --dataset_name $dataset_name \
-#         --save_dir final_plots/gram_spectrum \
-#         --save_name ${dataset_name}_all_spectra
+python scripts/plot_spectra.py \
+        --real_path None \
+        --gmm_path results/gram_spectrum/${dataset_name}_gmm_gram_spectrum.npy \
+        --diffusion_path results/gram_spectrum/${dataset_name}_diffusion_gram_spectrum.npy \
+        --dataset_name $dataset_name \
+        --save_dir final_plots/gram_spectrum \
+        --save_name ${dataset_name}_all_spectra

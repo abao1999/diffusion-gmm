@@ -6,7 +6,7 @@ from typing import Dict, Optional
 import matplotlib.pyplot as plt
 import numpy as np
 
-plt.style.use(["custom_style.mplstyle", "ggplot"])
+plt.style.use(["ggplot", "custom_style.mplstyle"])
 
 
 def plot_spectra_from_npy(

@@ -1,19 +1,21 @@
 import argparse
-import logging
 import os
 import time
-from typing import Dict, List, Optional, Tuple
+from typing import Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
-import torch
-from PIL import Image
+from torch.utils.data import DataLoader, Subset
 from torchvision import transforms
+from tqdm import tqdm
+
+from diffusion_gmm.base import DataPrefetcher
+from diffusion_gmm.utils import setup_dataset
 
 WORK_DIR = os.getenv("WORK", "")
 DATA_DIR = os.path.join(WORK_DIR, "vision_datasets")
 
-logger = logging.getLogger(__name__)
+plt.style.use(["ggplot", "custom_style.mplstyle"])
 
 
 def randomized_svd_batch(
@@ -54,106 +56,101 @@ def randomized_svd_batch(
     return U, S, Vt
 
 
-def compute_gram_spectrum(
-    sample_paths: Dict[str, List[str]],
-    class_name: str,
-    is_npy_dataset: bool = False,
-    rank: int = 100,
-    num_iter: int = 2,
-    save_name_prefix: str = "",
-    save_dir: Optional[str] = None,
-    verbose: bool = False,
+def compute_gramian_eigenvalues(
+    dataloader: DataLoader | DataPrefetcher,
+    device: str = "cpu",
+    p: int = 2,
 ) -> np.ndarray:
-    if is_npy_dataset:
-        all_samples = np.stack(
-            [np.load(path).flatten() for path in sample_paths[class_name]]
-        )
-    else:
-        transform = transforms.ToTensor()
-        all_samples = torch.stack(
-            [
-                transform(Image.open(path)).flatten()
-                for path in sample_paths[class_name]
-            ],
-            dim=0,
-        ).numpy()
-    print(f"all_samples shape: {all_samples.shape}")
+    """
+    Dataloader is for a specific class.
+    Compute the eigenvalues of all images for a specific class.
+    """
+    gramian_eigs = []
 
-    gram_matrices = np.array(
-        [sample[:, None] @ sample[None, :] for sample in all_samples]
-    )
+    for samples, _ in tqdm(dataloader, desc="Computing gramian eigenvalues"):
+        samples = samples.to(device)
+        gramian = samples[:, :, None] @ samples[:, None, :]
+        print(f"shape of batch of gramians: {gramian.shape}")
 
-    print(f"gram matrices shape: {gram_matrices.shape}")
-    # Perform randomized SVD on all Gram matrices at once
-    U_stacked, S_stacked, Vt_stacked = randomized_svd_batch(
-        gram_matrices, rank=rank, num_iter=num_iter
-    )
-    print(f"U_stacked shape: {U_stacked.shape}, S_stacked shape: {S_stacked.shape}")
+        # Use PyTorch to compute eigenvalues for each matrix in the batch
+        eigs = np.linalg.eigvalsh(gramian)
 
-    if save_dir is not None:
-        save_name_eigenvalues = (
-            f"{save_name_prefix}_{class_name}_gram_spectrum_eigenvalues.npy"
-        )
-        save_name_eigenvectors = (
-            f"{save_name_prefix}_{class_name}_gram_spectrum_eigenvectors.npy"
-        )
-        np.save(os.path.join(save_dir, save_name_eigenvalues), S_stacked)
-        np.save(os.path.join(save_dir, save_name_eigenvectors), U_stacked)
+        print(f"shape of batch of eigenvalues: {eigs.shape}")
+        gramian_eigs.extend(eigs.tolist())
 
-    # Reshape and extend eigenvalues and eigenvectors
-    combined_eigenvalues = S_stacked.reshape(-1)
-    return combined_eigenvalues
+    return np.array(gramian_eigs)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--split", type=str, default="edm_imagenet64_all")
-    parser.add_argument("--is_npy_dataset", action="store_true")
-    parser.add_argument(
-        "--target_classes", type=str, nargs="+", default=["english_springer"]
-    )
-    parser.add_argument("--num_samples_per_class", type=int, default=1000)
-    parser.add_argument("--rank", type=int, default=10)
-    parser.add_argument("--num_iter", type=int, default=2)
-    parser.add_argument("--save_dir", type=str, default="results/gram_spectrum")
+    parser.add_argument("--target_classes", type=str, nargs="+", required=True)
+    parser.add_argument("--data_split", type=str, default="representations")
+    parser.add_argument("--n_samples_per_class", type=int, default=1024)
     parser.add_argument(
         "--plot_save_dir", type=str, default="final_plots/gram_spectrum"
     )
+    parser.add_argument("--plot_name", type=str, default=None)
+    parser.add_argument(
+        "--data_save_dir", type=str, default=os.path.join(DATA_DIR, "gram_spectrum")
+    )
     args = parser.parse_args()
 
-    data_dir = os.path.join(DATA_DIR, args.split)
+    plot_save_dir = os.path.join(args.plot_save_dir, args.data_split)
+    os.makedirs(plot_save_dir, exist_ok=True)
 
-    sample_paths = {
-        class_name: [
-            os.path.join(data_dir, class_name, img)
-            for img in os.listdir(os.path.join(data_dir, class_name))
-        ][: args.num_samples_per_class]
-        for class_name in args.target_classes
+    save_dir = os.path.join(args.data_save_dir, args.data_split)
+    os.makedirs(save_dir, exist_ok=True)
+
+    plt.figure(figsize=(4, 3))
+    path = os.path.join(save_dir, "english_springer_gramian_eigenvalues.npy")
+    gramian_eigs = np.load(path).flatten()
+    plt.hist(gramian_eigs, bins=100, density=True)
+    plt.title("Gram Spectrum")
+    # plt.xlabel(r"Eigenvalue ($\lambda^{{0.1}}$)")
+    plt.xlabel("Eigenvalue")
+    plt.ylabel("Density (log scale)")
+    plt.yscale("log")
+    plot_save_path = os.path.join(plot_save_dir, "gram_spectrum.png")
+    plt.savefig(plot_save_path)
+    print(f"Saved histogram to {plot_save_path}")
+    exit()
+
+    class_list = args.target_classes
+    data_dir = os.path.join(DATA_DIR, args.data_split)
+
+    print("Setting up dataset...")
+    dataset, is_npy_dataset = setup_dataset(data_dir)
+    dataset.transform = transforms.ToTensor() if not is_npy_dataset else None
+    print("Dataset setup complete.")
+
+    # NOTE: has to be ImageFolder to have samples attribute.
+    image_paths, targets = zip(*dataset.samples)
+    targets = np.array(targets)
+    # targets = get_targets(dataset) # for case when dataset is not ImageFolder
+    class_to_idx = dataset.class_to_idx
+    class_to_indices = {
+        cls: np.where(targets == class_to_idx[cls])[0].tolist() for cls in class_list
     }
+    class_to_idx = dataset.class_to_idx
+    idx_to_class = {v: k for k, v in class_to_idx.items()}
 
-    all_eigenvalues = {}
-    for class_name in args.target_classes:
-        logger.info(
-            f"Computing gram spectrum for class {class_name} using {args.num_samples_per_class} samples"
-        )
-        eigenvalues = compute_gram_spectrum(
-            sample_paths,
-            class_name,
-            is_npy_dataset=args.is_npy_dataset,
-            rank=args.rank,
-            num_iter=args.num_iter,
-            save_name_prefix=args.split,
-            save_dir=args.save_dir,
-        )
-        all_eigenvalues[class_name] = eigenvalues
+    for class_name, indices in tqdm(
+        class_to_indices.items(), desc="Processing classes"
+    ):
+        print(f"Class {class_name} has {len(indices)} samples")
 
-    for class_name, eigenvalues in all_eigenvalues.items():
-        plt.figure(figsize=(4, 4))
-        plt.hist(eigenvalues**0.1, bins=100, density=True, alpha=0.5)
-        plt.yscale("log")
-        plt.ylabel("Density (log scale)")
-        plt.xlabel(r"Eigenvalue ($\lambda^{{{0.1}}}$)")
-        plt.title(class_name.replace("_", " ").title())
-        plt.savefig(os.path.join(args.plot_save_dir, f"{args.split}_{class_name}.png"))
-        plt.close()
-        print(f"Saved plot for {class_name} to {args.plot_save_dir}")
+        selected_indices = indices[: args.n_samples_per_class]
+        print(f"Selected {len(selected_indices)} samples for class {class_name}")
+        class_subset = Subset(dataset, selected_indices)
+        dataloader = DataLoader(
+            class_subset,
+            batch_size=64,
+            shuffle=False,  # this needs to be False to match image paths
+            num_workers=4,
+        )
+
+        print(f"Computing gramian eigenvalues for {class_name}")
+        gramian_eigs = compute_gramian_eigenvalues(dataloader, device="cpu")
+        save_path = os.path.join(save_dir, f"{class_name}_gramian_eigenvalues.npy")
+        np.save(save_path, gramian_eigs)
+        print("Gramian eigenvalues shape:", gramian_eigs.shape)

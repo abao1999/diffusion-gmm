@@ -1,5 +1,0 @@
-diffusion:
-  steps: 200
-  n_samples: 1024
-  save_dir: "/stor/work/AMDG_Gilpin_Summer2024/vision_datasets/diffusion_cifar10/unknown"
-  verbose: true

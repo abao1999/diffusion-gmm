@@ -1,0 +1,12 @@
+cnn:
+  data_dir: $WORK/vision_datasets/imagenette64
+  class_list: null
+  n_samples_per_class: 1024
+  model_id: resnet50
+  hook_layer: avgpool
+  save_dir: $WORK/vision_datasets/representations
+  save_as_pt: false
+
+  batch_size: 64
+  num_workers: 24
+  device: cuda
