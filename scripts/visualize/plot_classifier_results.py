@@ -23,7 +23,7 @@ def plot_quantity(
     fig, ax1 = plt.subplots(figsize=(4, 3))
 
     os.makedirs(save_dir, exist_ok=True)
-    save_path = os.path.join(save_dir, f"{save_name}.pdf")
+    save_path = os.path.join(save_dir, f"{save_name}.png")
 
     colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
     markers = ["s", "o", "D", "v", "^", "<", ">", "p", "*", "h", "H", "X", "D", "d"]
@@ -138,33 +138,36 @@ def plot_results(
 
 
 if __name__ == "__main__":
-    # model_name = "LinearMulticlassClassifier"
-    # run_name = "20_classes"
-    # n_classes = 20
+    model_name = "LinearMulticlassClassifier"
+    run_name = "10_classes"
+    n_classes = 10
 
     # class_list = ["church", "tench", "english_springer", "french_horn"]
-    # n_classes = len(class_list)
-    # run_name = "-".join(class_list)
+    class_list = [
+        "english_springer",
+        "french_horn",
+        "church",
+        "tench",
+    ]
 
-    model_name = "LinearBinaryClassifier"
-    # class_list = ["church", "tench"]
-    # class_list = ["racer", "mountain_bike"]
-    # class_list = ["kimono", "coral_reef"]
-    # class_list = ["garbage_truck", "polaroid"]
-    class_list = ["english_springer", "french_horn"]
     n_classes = len(class_list)
     run_name = "-".join(class_list)
 
+    # model_name = "LinearBinaryClassifier"
+    # class_list = ["english_springer", "french_horn"]
+    # n_classes = len(class_list)
+    # run_name = "-".join(class_list)
+
     print(run_name)
 
-    json_dir = os.path.join("results/classifier", model_name, run_name)
+    json_dir = os.path.join("results/classifier_representations", model_name, run_name)
 
     run_json_paths = {
-        "Diffusion": glob.glob(
-            os.path.join(json_dir, f"edm_imagenet64_*{run_name}*.json"),
+        "Representations": glob.glob(
+            os.path.join(json_dir, f"representations_*{run_name}*.json"),
         ),
         "GMM": glob.glob(
-            os.path.join(json_dir, f"gmm_edm_imagenet64_*{run_name}*.json")
+            os.path.join(json_dir, f"gmm_representations_*{run_name}*.json")
         ),
     }
     print(run_json_paths)
@@ -173,6 +176,6 @@ if __name__ == "__main__":
         run_json_paths,
         num_classes=n_classes,
         title="Linear Classifier",
-        save_dir="final_plots/classifier",
+        save_dir="final_plots/classifier_representations",
         save_name=save_name,
     )

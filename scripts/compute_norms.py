@@ -170,16 +170,16 @@ if __name__ == "__main__":
     class_list = args.target_classes
     run_name = "-".join(class_list)
 
-    plot_norms(
-        save_dir,
-        class_list,
-        plot_save_dir,
-        args.p,
-        plot_separately=False,
-        plot_name=args.plot_name,
-        use_log_scale=False,
-    )
-    exit()
+    # plot_norms(
+    #     save_dir,
+    #     class_list,
+    #     plot_save_dir,
+    #     args.p,
+    #     plot_separately=False,
+    #     plot_name=args.plot_name,
+    #     use_log_scale=False,
+    # )
+    # exit()
 
     print(f"Computing norms for {run_name}...")
     data_dir = os.path.join(DATA_DIR, args.data_split)

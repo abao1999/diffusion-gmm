@@ -78,6 +78,7 @@ def main(cfg):
     if img_shape != get_img_shape(test_subset.dataset):  # type: ignore
         raise ValueError("Train and test subsets have different image shapes")
     input_dim = int(np.prod(img_shape))
+    print(f"Input dimension: {input_dim}")
 
     experiment = ClassifierExperiment(
         input_dim=input_dim,
@@ -98,6 +99,8 @@ def main(cfg):
         np.linspace(1.0, 0.05, cfg.classifier.n_props_train)
         * cfg.classifier.n_train_samples_per_class
     ).astype(int)
+    # n_train_per_class_schedule = np.array([1024]).astype(int)
+    n_train_per_class_schedule = np.array([1024, 512, 256, 128, 64, 32]).astype(int)
     # n_train_per_class_schedule = np.array(
     #     [2048, 1658, 1269, 880, 491, 256, 102]
     # ).astype(int)

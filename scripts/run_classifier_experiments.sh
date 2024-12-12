@@ -1,39 +1,58 @@
 main_dir=$(dirname "$(dirname "$0")")
 data_dir=$WORK/vision_datasets
 
-train_split=0.8 # set to 1.0 when using separate folder for test set
-n_runs=5
-n_props_train=6
+train_split=0.5 # set to 1.0 when using separate folder for test set
+n_runs=4
+n_props_train=1
 reset_model_random_seed=false
-results_save_dir=results/classifier
-num_epochs=500
-max_allowed_samples_per_class=8000
+results_save_dir=results/classifier_representations
+num_epochs=400
+max_allowed_samples_per_class=4096
 max_allowed_samples_per_class_test=0
-n_train_samples_per_class=2048
+n_train_samples_per_class=1024
 n_test_samples_per_class=1024
-batch_size=64
-lr=3e-3
+batch_size=128
+lr=1e-1
 train_augmentations=None
 resample_train_subset=true
 resample_test_subset=true
-eval_epoch_interval=5
-early_stopping_patience=60
-model_save_dir=$WORK/vision_datasets/checkpoints
+eval_epoch_interval=10
+early_stopping_patience=80
+# model_save_dir=$WORK/vision_datasets/checkpoints
 model_save_dir=null
 
-model_class=LinearBinaryClassifier
+model_class=LinearMulticlassClassifier
 criterion=MSELoss
 optimizer_class=SGD
 
-scheduler_class=CosineAnnealingLR
+scheduler_class=CosineAnnealingWarmRestarts
 verbose=true
 
 datetime=$(date +%m-%d_%H-%M-%S)
 
 class_list=(
+    "baseball"
+    "cauliflower"
+    "church"
+    "coral_reef"
     "english_springer"
     "french_horn"
+    "garbage_truck"
+    "goldfinch"
+    "kimono"
+    "mountain_bike"
+    "patas_monkey"
+    "pizza"
+    "planetarium"
+    "polaroid"
+    "racer"
+    "salamandra"
+    "tabby"
+    "tench"
+    "trimaran"
+    "volcano"
 )
+
 class_list_json=$(printf '%s\n' "${class_list[@]}" | jq -R . | jq -s -c .)
 echo $class_list_json
 
@@ -44,15 +63,17 @@ else
 fi
 echo $run_name
 
-dataset_list=("edm_imagenet64" "gmm_edm_imagenet64")
+dataset_list=("representations" "gmm_representations")
 
-rseeds=(132 310 930 1220)
+# rseeds=(98 12 1234 42)
+rseeds=(122 41 55 34 2223)
 
 for rseed in "${rseeds[@]}"; do
     echo $rseed
     for i in "${!dataset_list[@]}"; do
         dataset=${dataset_list[i]}
-        train_dataset=${dataset}_all
+        # train_dataset=${dataset}_all
+        train_dataset=$dataset
         device_idx=2
         echo $train_dataset
         echo $device_idx
@@ -84,8 +105,8 @@ for rseed in "${rseeds[@]}"; do
             classifier.device=cuda:${device_idx} \
             classifier.optimizer.name=$optimizer_class \
             classifier.scheduler.name=$scheduler_class \
-            classifier.scheduler.CosineAnnealingLR_kwargs.T_max=$num_epochs \
-            classifier.scheduler.CosineAnnealingLR_kwargs.eta_min=3e-5 \
+            classifier.scheduler.CosineAnnealingWarmRestarts_kwargs.T_0=$((num_epochs / 2)) \
+            classifier.scheduler.CosineAnnealingWarmRestarts_kwargs.eta_min=1e-2 \
             classifier.verbose=$verbose \
             rseed=$rseed
     done

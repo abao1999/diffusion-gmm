@@ -101,18 +101,45 @@ if __name__ == "__main__":
     save_dir = os.path.join(args.data_save_dir, args.data_split)
     os.makedirs(save_dir, exist_ok=True)
 
-    plt.figure(figsize=(4, 3))
-    path = os.path.join(save_dir, "english_springer_gramian_eigenvalues.npy")
-    gramian_eigs = np.load(path).flatten()
-    plt.hist(gramian_eigs, bins=100, density=True)
-    plt.title("Gram Spectrum")
-    # plt.xlabel(r"Eigenvalue ($\lambda^{{0.1}}$)")
-    plt.xlabel("Eigenvalue")
-    plt.ylabel("Density (log scale)")
-    plt.yscale("log")
-    plot_save_path = os.path.join(plot_save_dir, "gram_spectrum.png")
-    plt.savefig(plot_save_path)
-    print(f"Saved histogram to {plot_save_path}")
+    for class_name in args.target_classes:
+        plt.figure(figsize=(4, 3))
+        representations_path = os.path.join(
+            args.data_save_dir,
+            "representations",
+            f"{class_name}_gramian_eigenvalues.npy",
+        )
+        gmm_path = os.path.join(
+            args.data_save_dir,
+            "gmm_representations",
+            f"{class_name}_gramian_eigenvalues.npy",
+        )
+        representations_gramian_eigs = np.load(representations_path).flatten()
+        gmm_gramian_eigs = np.load(gmm_path).flatten()
+        bins = np.histogram_bin_edges(
+            np.concatenate([representations_gramian_eigs, gmm_gramian_eigs]), bins=100
+        )
+        plt.hist(
+            representations_gramian_eigs,
+            bins=bins,  # type: ignore
+            density=True,
+            alpha=0.5,
+            label="Representations",
+        )
+        plt.hist(
+            gmm_gramian_eigs,
+            bins=bins,  # type: ignore
+            density=True,
+            alpha=0.5,
+            label="GMM",
+        )
+        plt.title("Gram Spectrum")
+        plt.xlabel("Eigenvalue")
+        plt.ylabel("Density (log scale)")
+        plt.yscale("log")
+        plt.legend()
+        plot_save_path = os.path.join(plot_save_dir, f"{class_name}_gram_spectrum.png")
+        plt.savefig(plot_save_path)
+        print(f"Saved histogram to {plot_save_path}")
     exit()
 
     class_list = args.target_classes
@@ -145,7 +172,7 @@ if __name__ == "__main__":
         dataloader = DataLoader(
             class_subset,
             batch_size=64,
-            shuffle=False,  # this needs to be False to match image paths
+            shuffle=True,
             num_workers=4,
         )
 

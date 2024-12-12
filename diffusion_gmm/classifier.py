@@ -464,6 +464,11 @@ class ClassifierExperiment:
                         logger.info(f"Best test loss: {best_test_loss}")
                         break
 
+                    if train_loss / test_loss < 0.5:
+                        logger.info("Generalization gap diverged at epoch %d", epoch)
+                        results[i]["generalization_gap_diverged"] = True
+                        break
+
                 if self.scheduler is not None:
                     self.scheduler.step()
 

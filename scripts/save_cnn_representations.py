@@ -21,33 +21,24 @@ def main(cfg):
     logger.info(f"Data directory: {data_dir}")
     logger.info(f"Save directory: {save_dir}")
 
-    # Load the pretrained ResNet model
+    # Load the pretrained cnn model
     model_id = cfg.cnn.model_id
     model = getattr(models, model_id)(pretrained=True)
     logger.info(f"Loaded model: {model_id}")
 
-    # Modify the model to output features after the average pooling layer
-    model = torch.nn.Sequential(
-        *(list(model.children())[:-1])
-    )  # Remove the last FC layer
-    model.eval()  # Set model to evaluation mode
-
-    print(model)
-    # # Modify the model to output features from a specific layer using a forward hook
+    # Modify the model to output features after the average pooling layer (remove last FC layer)
+    model = torch.nn.Sequential(*(list(model.children())[:-1]))
     # def get_features_hook(module, input, output):
     #     # Store the output of the hooked layer
     #     model.features = output
-
-    # # Assuming you want to hook into the layer before the final fully connected layer
     # layer_to_hook = model.avgpool  # Example: hooking into the average pooling layer
     # layer_to_hook.register_forward_hook(get_features_hook)
+    model.eval()  # Set model to evaluation mode
 
-    # model.eval()  # Set model to evaluation mode
-
+    print(model)
     device = torch.device(cfg.cnn.device)
     model = model.to(device)
 
-    # Set up dataset
     transform = transforms.Compose(
         [
             transforms.Resize((224, 224)),
@@ -120,9 +111,9 @@ def main(cfg):
                     else:
                         feature_path = os.path.join(class_dir, f"{sample_idx}.npy")
                         np.save(feature_path, feature)
-                print(
-                    f"Saved {len(batch_image_paths)} feature representations for class {class_name} to {class_dir}"
-                )
+                # print(
+                #     f"Saved {len(batch_image_paths)} feature representations for class {class_name} to {class_dir}"
+                # )
 
 
 if __name__ == "__main__":
