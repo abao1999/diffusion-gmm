@@ -58,13 +58,13 @@ def main(cfg):
                 f"Saved {class_name} mean and covariance to {cfg.gmm.stats_save_dir}"
             )
 
-    gmm.sample_from_computed_stats(
-        class_stats=class_stats,
-        n_samples_per_class=cfg.gmm.n_samples_generate,
-        save_dir=cfg.gmm.save_dir,
-        batch_size=cfg.gmm.batch_size,
-        sample_idx=cfg.gmm.sample_idx,
-    )
+    # gmm.sample_from_computed_stats(
+    #     class_stats=class_stats,
+    #     n_samples_per_class=cfg.gmm.n_samples_generate,
+    #     save_dir=cfg.gmm.save_dir,
+    #     batch_size=cfg.gmm.batch_size,
+    #     sample_idx=cfg.gmm.sample_idx,
+    # )
 
 
 if __name__ == "__main__":

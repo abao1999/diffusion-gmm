@@ -207,32 +207,48 @@ if __name__ == "__main__":
     # dataset_name = "Imagenet64"
     # class_list = [
     #     "baseball",
+    #     "cauliflower",
     #     "church",
-    #     "english springer",
-    #     "french horn",
-    #     "garbage truck",
+    #     "coral_reef",
+    #     "english_springer",
+    #     "french_horn",
+    #     "garbage_truck",
     #     "goldfinch",
     #     "kimono",
+    #     "mountain_bike",
+    #     "patas_monkey",
+    #     "pizza",
+    #     "planetarium",
+    #     "polaroid",
+    #     "racer",
     #     "salamandra",
     #     "tabby",
     #     "tench",
+    #     "trimaran",
+    #     "volcano",
     # ]
-    # class_names_diffusion = [
-    #     f"{dataset_name}_{class_name}_edm_gram_spectrum.npy"
-    #     for class_name in class_list
-    # ]
-    # class_names_gmm = [
-    #     f"{dataset_name}_{class_name}_gmm_gram_spectrum.npy"
-    #     for class_name in class_list
-    # ]
-    # all_diffusion_paths = {
+    # # class_names_diffusion = [
+    # #     f"{dataset_name}_{class_name}_edm_gram_spectrum.npy"
+    # #     for class_name in class_list
+    # # ]
+    # # class_names_gmm = [
+    # #     f"{dataset_name}_{class_name}_gmm_gram_spectrum.npy"
+    # #     for class_name in class_list
+    # # ]
+    # class_names_spectra = [f"{class_name}_eigenvalues.npy" for class_name in class_list]
+
+    # all_spectra_paths = {
     #     class_name: os.path.join(data_dir, path)
-    #     for class_name, path in zip(class_list, class_names_diffusion)
+    #     for class_name, path in zip(class_list, class_names_spectra)
     # }
-    # all_gmm_paths = {
-    #     class_name: os.path.join(data_dir, path)
-    #     for class_name, path in zip(class_list, class_names_gmm)
-    # }
+    # # all_diffusion_paths = {
+    # #     class_name: os.path.join(data_dir, path)
+    # #     for class_name, path in zip(class_list, class_names_diffusion)
+    # # }
+    # # all_gmm_paths = {
+    # #     class_name: os.path.join(data_dir, path)
+    # #     for class_name, path in zip(class_list, class_names_gmm)
+    # # }
     # plot_spectra_from_multiple_npy(
     #     diffusion_paths=all_diffusion_paths,
     #     gmm_paths=all_gmm_paths,
