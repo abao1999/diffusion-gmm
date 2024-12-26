@@ -14,7 +14,3 @@ gmm:
   save_dir: null
   stats_save_dir: null
   verbose: true
-
-
-  # data_dir: "/stor/work/AMDG_Gilpin_Summer2024/vision_datasets/cifar10"
-  # dataset_name: CIFAR10

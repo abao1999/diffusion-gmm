@@ -2,12 +2,26 @@ defaults:
   - _self_
   - gmm
   - cnn
-  - classifier
+  - classifier: default
   - override hydra/hydra_logging: disabled 
+  # - override hydra/sweeper: optuna
 
 hydra:
   output_subdir: null
   run:
     dir: logs
 
+# string identifier for wandb runs and generic I/O
+run_name: null
+
+# wandb parameters
+wandb:
+  log: False
+  project_name: diffusion-gmm
+  entity: abao
+  group_name: classifier
+  resume: False
+  tags: null
+
+# random state for reproducibility
 rseed: 99

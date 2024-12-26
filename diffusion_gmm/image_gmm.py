@@ -2,7 +2,7 @@ import logging
 import os
 import warnings
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 import torch
@@ -24,7 +24,7 @@ class ImageGMM(GaussianMixture):
 
     n_components: int
     dataset: DatasetFolder
-    classes: List[str] | str
+    classes: Union[List[str], str]
     covariance_type: str = "full"
     verbose: bool = False
     rseed: int = 99
@@ -56,7 +56,7 @@ class ImageGMM(GaussianMixture):
 
         targets = get_targets(self.dataset)
         class_to_idx = self.dataset.class_to_idx
-        self.class_to_indices = {
+        self.indices_by_class = {
             cls: np.where(targets == class_to_idx[cls])[0].tolist()
             for cls in self.classes
         }
@@ -71,7 +71,7 @@ class ImageGMM(GaussianMixture):
         """
         selected_inds = []
         for cls in self.classes:
-            selected_inds.extend(self.class_to_indices[cls][:num_samples_per_class])
+            selected_inds.extend(self.indices_by_class[cls][:num_samples_per_class])
 
         subset = Subset(self.dataset, selected_inds)
 
@@ -102,7 +102,7 @@ class ImageGMM(GaussianMixture):
                 "covariance": None,
             }
             selected_inds.extend(
-                self.class_to_indices[class_name][:num_samples_per_class]
+                self.indices_by_class[class_name][:num_samples_per_class]
             )
 
             subset = Subset(self.dataset, selected_inds)

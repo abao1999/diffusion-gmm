@@ -28,6 +28,7 @@ echo $class_list_json
 
 python scripts/save_cnn_representations.py \
     cnn.data_dir=$WORK/vision_datasets/edm_imagenet64_all \
+    cnn.model_id=resnet50 \
     cnn.class_list=${class_list_json} \
     cnn.save_dir=$WORK/vision_datasets/representations \
     cnn.n_samples_per_class=10240 \

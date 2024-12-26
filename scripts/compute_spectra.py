@@ -21,7 +21,7 @@ def plot_spectra_from_multiple_npy(
     Plot spectra of Gram matrices from multiple diffusion and GMM paths.
     """
     os.makedirs(save_dir, exist_ok=True)
-    save_path = os.path.join(save_dir, f"{save_name}.pdf")
+    save_path = os.path.join(save_dir, f"{save_name}.png")
 
     num_classes = len(spectra_paths)
     # Determine the number of rows and columns for the grid
@@ -37,6 +37,12 @@ def plot_spectra_from_multiple_npy(
     ):
         if os.path.isfile(spectra_path):
             spectra_eigenvalues: np.ndarray = np.load(spectra_path)
+        else:
+            raise ValueError(f"File {spectra_path} does not exist")
+        # not_small = np.where(spectra_eigenvalues > 1e-6)[0]
+        # print(f"Number of not small eigenvalues: {len(not_small)}")
+        # spectra_eigenvalues = spectra_eigenvalues[not_small]
+        print(f"spectra_eigenvalues shape: {spectra_eigenvalues.shape}")
         print(f"Loaded {class_name} with shape {spectra_eigenvalues.shape}")
         if scale_factor is not None:
             spectra_eigenvalues = spectra_eigenvalues**scale_factor  # type: ignore
@@ -93,7 +99,8 @@ def compute_and_save_spectra(cov_path: str, class_name: str, save_dir: str):
 
 
 if __name__ == "__main__":
-    dataset_name = "edm_imagenet64_all"
+    # dataset_name = "edm_imagenet64_all"
+    dataset_name = "representations"
     stats_dir = os.path.join(DATA_DIR, "computed_stats", dataset_name)
     spectra_dir = os.path.join(stats_dir, "spectra")
     eigenvalues_paths_dict = {}
@@ -109,8 +116,8 @@ if __name__ == "__main__":
         n_bins=100,
         num_cols=4,
         save_dir="final_plots",
-        save_name="eigenvalues_spectra_combined",
-        scale_factor=0.1,
+        save_name="representations_eigenvalues_spectra_combined",
+        scale_factor=None,
         log_scale_x=False,
     )
     exit()

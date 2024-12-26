@@ -29,8 +29,8 @@ def create_image_grid(
         sample = Image.open(next(iter(image_paths.values()))[0])
         w, h = sample.size
         # Calculate the number of blocks needed per class
-        block_size = (1, 3)
-        n_blocks_per_row = 4
+        block_size = (4, 4)
+        n_blocks_per_row = 1
         # Calculate the total number of rows needed
         total_rows = (
             num_classes * block_size[0] + n_blocks_per_row - 1
@@ -77,6 +77,25 @@ def create_image_grid(
         plt.subplots_adjust(wspace=0, hspace=0)
         plt.savefig(save_path, bbox_inches="tight", pad_inches=0)
         plt.close()
+
+
+# def create_image_grid_single_class(
+#     image_paths: Dict[str, List[str]],
+#     save_path: str,
+#     title: str = "Imagenet 64x64",
+#     save_as_image: bool = True,
+# ) -> None:
+#     sample = Image.open(next(iter(image_paths.values()))[0])
+#     w, h = sample.size
+#     new_im = Image.new("RGB", (w, h))
+#     new_im.save(save_path)
+#     n_rows = 1
+#     n_cols = 1
+#     new_img = Image.new("RGB", (w, h))
+#     for img_path in image_paths[class_name]:
+#         img = Image.open(img_path)
+#         new_img.paste(img, (0, 0))
+#     new_img.save(save_path)
 
 
 if __name__ == "__main__":
@@ -126,5 +145,6 @@ if __name__ == "__main__":
         for class_name in class_list
     }
     print(image_paths)
-    save_path = os.path.join(args.save_dir, f"{args.data_split}_{class_names}_grid.pdf")
+    # save_path = os.path.join(args.save_dir, f"{args.data_split}_{class_names}_grid.pdf")
+    save_path = os.path.join(args.save_dir, f"sampling_{class_names}_grid.png")
     create_image_grid(image_paths, save_path)

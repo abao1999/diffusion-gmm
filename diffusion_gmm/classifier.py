@@ -14,6 +14,7 @@ from torch.utils.data import DataLoader, Subset
 from torchvision import models
 from tqdm.auto import tqdm
 
+import wandb
 from diffusion_gmm.base import (
     DataPrefetcher,
     MultiClassSubset,
@@ -28,13 +29,23 @@ class LinearMulticlassClassifier(nn.Module):
     Simple linear multiclass classifier
     """
 
-    def __init__(self, num_classes: int, input_dim: int):
+    def __init__(
+        self,
+        num_classes: int,
+        input_dim: int,
+        output_logit: bool = False,
+        use_bias: bool = False,
+    ):
         super(LinearMulticlassClassifier, self).__init__()
-        self.fc = nn.Linear(input_dim, num_classes)
+        self.fc = nn.Linear(input_dim, num_classes, bias=use_bias)
+        self.output_logit = output_logit
 
     def forward(self, x):
         x = x.view(x.size(0), -1)  # Flatten the input
-        return F.softmax(self.fc(x), dim=1)
+        if self.output_logit:
+            return self.fc(x)
+        else:
+            return F.softmax(self.fc(x), dim=1)
 
 
 class TwoLayerMulticlassClassifier(nn.Module):
@@ -42,16 +53,27 @@ class TwoLayerMulticlassClassifier(nn.Module):
     Two-layer fully connected multiclass classifier
     """
 
-    def __init__(self, num_classes: int, input_dim: int, hidden_dim: int):
+    def __init__(
+        self,
+        num_classes: int,
+        input_dim: int,
+        hidden_dim: int,
+        output_logit: bool = False,
+        use_bias: bool = False,
+    ):
         super(TwoLayerMulticlassClassifier, self).__init__()
-        self.fc1 = nn.Linear(input_dim, hidden_dim)  # First layer
+        self.fc1 = nn.Linear(input_dim, hidden_dim, bias=use_bias)  # First layer
         self.relu = nn.ReLU()  # Activation function
         self.fc2 = nn.Linear(hidden_dim, num_classes)  # Second layer
+        self.output_logit = output_logit
 
     def forward(self, x):
         x = x.view(x.size(0), -1)  # Flatten the input
         x = self.relu(self.fc1(x))  # First layer with ReLU activation
-        return F.softmax(self.fc2(x), dim=1)  # Second layer with Softmax activation
+        if self.output_logit:
+            return self.fc2(x)
+        else:
+            return F.softmax(self.fc2(x), dim=1)  # Second layer with Softmax activation
 
 
 class LinearBinaryClassifier(nn.Module):
@@ -59,19 +81,17 @@ class LinearBinaryClassifier(nn.Module):
     Simple linear binary classifier
     """
 
-    def __init__(self, num_classes: int, input_dim: int, output_logit: bool = False):
-        """
-        num_classes must be 2 for binary classification
-        if output_logit is True, the output will be logits (unconstrained)
-            This is meant to be used with BCEWithLogitsLoss
-        Otherwise, the output will be constrained to be between 0 and 1 (probability) and it is recommended to use BCELoss
-        """
+    def __init__(
+        self,
+        num_classes: int,
+        input_dim: int,
+        output_logit: bool = False,
+        use_bias: bool = False,
+    ):
         if num_classes != 2:
             raise ValueError("num_classes must be 2 for binary classification")
         super(LinearBinaryClassifier, self).__init__()
-        self.fc = nn.Linear(
-            input_dim, 1, bias=True
-        )  # Output 1 for binary classification
+        self.fc = nn.Linear(input_dim, 1, bias=use_bias)
         self.output_logit = output_logit
 
     def forward(self, x):
@@ -82,42 +102,7 @@ class LinearBinaryClassifier(nn.Module):
             return torch.sigmoid(self.fc(x))
 
 
-class TwoLayerBinaryClassifier(nn.Module):
-    """
-    Two-layer fully connected binary classifier
-    """
-
-    def __init__(
-        self,
-        num_classes: int,
-        input_dim: int,
-        hidden_dim: int,
-        output_logit: bool = False,
-    ):
-        """
-        num_classes must be 2 for binary classification
-        if output_logit is True, the output will be logits (unconstrained)
-            This is meant to be used with BCEWithLogitsLoss
-        Otherwise, the output will be constrained to be between 0 and 1 (probability) and it is recommended to use BCELoss
-        """
-        if num_classes != 2:
-            raise ValueError("num_classes must be 2 for binary classification")
-        super(TwoLayerBinaryClassifier, self).__init__()
-        self.fc1 = nn.Linear(input_dim, hidden_dim)  # First layer
-        self.relu = nn.ReLU()  # Activation function
-        self.fc2 = nn.Linear(hidden_dim, 1)  # Second layer for binary classification
-        self.output_logit = output_logit
-
-    def forward(self, x):
-        x = x.view(x.size(0), -1)  # Flatten the input
-        x = self.relu(self.fc1(x))  # First layer with ReLU activation
-        if self.output_logit:
-            return self.fc2(x)  # Return logits
-        else:
-            return torch.sigmoid(self.fc2(x))  # Return probabilities
-
-
-class ResNet64(nn.Module):
+class ResNet(nn.Module):
     """
     ResNet model adapted for 64x64 input images
     """
@@ -126,33 +111,52 @@ class ResNet64(nn.Module):
         self,
         num_classes: int,
         input_dim: int,
+        model_id: str,
         pretrained: bool = True,
         output_logit: bool = False,
+        use_bias: bool = False,
     ):
-        super(ResNet64, self).__init__()
-        # Load a pre-defined ResNet model
+        super(ResNet, self).__init__()
         self.pretrained = pretrained
-        self.resnet = models.resnet18(pretrained=self.pretrained)
+        self.resnet = getattr(models, model_id)(pretrained=self.pretrained)
         self.output_logit = output_logit
 
-        # No change, but exposing this could be useful
-        self.resnet.conv1 = nn.Conv2d(
+        if input_dim != (3 * 224 * 224):
+            warnings.warn(
+                f"input_dim {input_dim} is not the standard input size for ResNet"
+            )
+
+        # No change, but could be useful to expose: ResNet uses this modification of a traditional conv2d layer
+        self.resnet_conv1 = nn.Conv2d(
             in_channels=3,
             out_channels=64,
             kernel_size=7,
             stride=2,
             padding=3,
-            bias=False,
+            bias=False,  # Resnet handles biases with Batch Normalization layers that follow convolutions
         )
 
-        # Modify the fully connected layer to output the correct number of classes
-        self.resnet.fc = nn.Linear(self.resnet.fc.in_features, 1)
+        if self.pretrained:
+            # Freeze all parameters except the last layer
+            for param in self.resnet.parameters():
+                param.requires_grad = False
+            for param in self.resnet.fc.parameters():
+                param.requires_grad = True
+        else:
+            # If not pretrained, make all parameters trainable
+            for param in self.resnet.parameters():
+                param.requires_grad = True
+
+        # Modify the fully connected layer to output the correct number of classes, this is what we train
+        self.resnet.fc = nn.Linear(
+            self.resnet.fc.in_features, num_classes, bias=use_bias
+        )
 
     def forward(self, x):
         if self.output_logit:
             return self.resnet(x)
         else:
-            return torch.sigmoid(self.resnet(x))
+            return torch.softmax(self.resnet(x), dim=1)
 
 
 @dataclass
@@ -199,6 +203,7 @@ class ClassifierExperiment:
             self.use_binary_classifier = False
             if self.criterion_class == nn.MSELoss:
                 self.use_one_hot_enc = True
+        print(f"use_one_hot_enc: {self.use_one_hot_enc}")
 
     def make_model_and_optimizer(self):
         self.model = self.model_class(
@@ -219,7 +224,7 @@ class ClassifierExperiment:
         else:
             self.scheduler = None
 
-    def train(self, dataloader: DataLoader | DataPrefetcher) -> float:
+    def train(self, dataloader: Union[DataLoader, DataPrefetcher]) -> float:
         """
         Train the model for one epoch
         """
@@ -252,7 +257,9 @@ class ClassifierExperiment:
         return avg_loss
 
     @torch.no_grad()
-    def evaluate(self, dataloader: DataLoader | DataPrefetcher) -> Tuple[float, float]:
+    def evaluate(
+        self, dataloader: Union[DataLoader, DataPrefetcher]
+    ) -> Tuple[float, float]:
         """
         Evaluate the model on the test set and return the average loss and accuracy
         """
@@ -306,7 +313,7 @@ class ClassifierExperiment:
         pin_memory: bool = True,
         persistent_workers: bool = True,
         make_prefetcher: bool = True,
-    ) -> DataLoader | DataPrefetcher:
+    ) -> Union[DataLoader, DataPrefetcher]:
         # hardcode balance class distribution
         n_samples_to_use = int(n_samples_per_class * len(self.class_list))
         dataset = subset.dataset
@@ -320,11 +327,11 @@ class ClassifierExperiment:
             targets = get_targets(dataset)  # type: ignore
 
             # Group indices by class
-            class_to_indices = {class_to_idx[cls]: [] for cls in self.class_list}
+            indices_by_class = {class_to_idx[cls]: [] for cls in self.class_list}
             for idx in subset_indices:
                 class_idx = targets[idx]
-                if class_idx in class_to_indices:
-                    class_to_indices[class_idx].append(idx)
+                if class_idx in indices_by_class:
+                    indices_by_class[class_idx].append(idx)
                 else:
                     raise ValueError(
                         f"Class {class_idx} should not be present in dataset_indices."
@@ -333,7 +340,7 @@ class ClassifierExperiment:
             # Shuffle and select a proportion of indices for each class
             prop_to_use = n_samples_to_use / len(subset)
             selected_indices = []
-            for class_idx, indices in class_to_indices.items():
+            for class_idx, indices in indices_by_class.items():
                 subset_size = int(len(indices) * prop_to_use)
                 if rng is not None:
                     selected_indices.extend(
@@ -352,7 +359,10 @@ class ClassifierExperiment:
         if self.verbose:
             target_counts = np.bincount([label.item() for _, label in selected_subset])
             logger.info("Built dataloader with %d samples...", len(selected_subset))
-            logger.info("Distribution of targets in subset: %s", target_counts)
+            logger.info(
+                "Distribution of targets in subset: %s",
+                dict(zip(self.class_list, target_counts)),
+            )
 
         dataloader = DataLoader(
             selected_subset,
@@ -363,6 +373,7 @@ class ClassifierExperiment:
             pin_memory_device=str(self.device),
             persistent_workers=persistent_workers,
         )
+        # wrap in prefetcher if requested
         if make_prefetcher:
             dataloader = DataPrefetcher(dataloader, self.device)
 
@@ -383,6 +394,7 @@ class ClassifierExperiment:
         model_save_dir: Optional[str] = None,
         model_save_name: Optional[str] = None,
         verbose: bool = False,
+        log_wandb: bool = False,
     ) -> List[Dict[str, Any]]:
         """
         Run the classifier experiment
@@ -424,16 +436,21 @@ class ClassifierExperiment:
             if verbose:
                 logger.info(f"n_train_per_class {n_train_per_class}")
                 logger.info(
-                    f"Building train dataloader using {len(train_loader.dataset)} samples from the training split..."  # type: ignore
+                    f"Built train dataloader using {len(train_loader.dataset)} samples from the training split..."  # type: ignore
                 )
+                logger.info(f"Model: {self.model}")
+                logger.info(f"Optimizer: {self.optimizer}")
+                logger.info(f"Scheduler: {self.scheduler}")
 
             best_test_loss = float("inf")
+            best_acc = 0.0
             early_stopping_counter = 0
 
             for epoch in tqdm(range(num_epochs), desc="Training"):
                 train_loss = self.train(train_loader)
                 if epoch % eval_epoch_interval == 0 or epoch == num_epochs - 1:
                     test_loss, accuracy = self.evaluate(test_loader)
+                    curr_lr = self.optimizer.param_groups[0]["lr"]
                     if verbose:
                         logger.info(
                             "Epoch %d, Train Loss: %f, Test Loss: %f, Accuracy: %f%%",
@@ -442,9 +459,21 @@ class ClassifierExperiment:
                             test_loss,
                             accuracy * 100,
                         )
-                        logger.info(
-                            f"learning rate: {self.optimizer.param_groups[0]['lr']}"
+                        logger.info(f"learning rate: {curr_lr}")
+
+                    if log_wandb:
+                        wandb.log(
+                            {
+                                "train_loss": train_loss,
+                                "test_loss": test_loss,
+                                "accuracy": accuracy,
+                                "learning_rate": curr_lr,
+                            },
+                            step=epoch,
                         )
+
+                    if accuracy > best_acc:
+                        best_acc = accuracy
 
                     if test_loss < best_test_loss:
                         best_test_loss = test_loss
@@ -453,6 +482,7 @@ class ClassifierExperiment:
                             "train_loss": train_loss,
                             "test_loss": test_loss,
                             "accuracy": accuracy,
+                            "best_acc": best_acc,
                             "epoch": epoch,
                         }
                         early_stopping_counter = 0  # Reset counter if improvement
@@ -471,6 +501,9 @@ class ClassifierExperiment:
 
                 if self.scheduler is not None:
                     self.scheduler.step()
+
+            if log_wandb:
+                wandb.log({"last_epoch": epoch})
 
             if model_save_dir is not None:
                 model_save_name = f"n{n_train_per_class}_c{len(self.class_list)}.pth"

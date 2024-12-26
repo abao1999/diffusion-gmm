@@ -1,0 +1,98 @@
+sweep_mode: false
+
+# dataset params
+train_data_dir: /stor/work/AMDG_Gilpin_Summer2024/vision_datasets/edm_imagenet64_all
+test_data_dir: null
+
+class_list:
+  - baseball
+  - cauliflower
+  - church
+  - coral_reef
+  - english_springer
+  - french_horn
+  - garbage_truck
+  - goldfinch
+  - kimono
+  - mountain_bike
+
+
+train_split: 0.8
+max_allowed_samples_per_class: 10240
+n_train_samples_per_class: 1024
+n_test_samples_per_class: 1024
+train_augmentations: null
+device: cuda:1
+
+# experiment params
+n_runs: 1
+n_props_train: 1
+reset_model_random_seed: false
+
+# optimization params
+criterion: MSELoss
+lr: 1e-3
+batch_size: 64
+num_epochs: 600
+eval_epoch_interval: 5
+early_stopping_patience: 100
+
+# logging params
+verbose: false
+save_dir: results/classifier
+save_name: classifier
+model_save_dir: null
+
+model:
+  name: LinearMulticlassClassifier
+  use_bias: false
+  output_logit: true
+
+  TwoLayerMulticlassClassifier_kwargs:
+    hidden_dim: 64
+
+  ResNet_kwargs:
+    pretrained: true
+    model_id: resnet18
+
+
+optimizer:
+  name: SGD
+
+  SGD_kwargs:
+    momentum: 0
+    dampening: 0
+    weight_decay: 0
+    nesterov: false
+
+  Adam_kwargs:
+    betas: [0.9, 0.999]
+    eps: 1e-8
+
+  AdamW_kwargs:
+    weight_decay: 1e-3
+    betas: [0.9, 0.999]
+    eps: 1e-8
+
+scheduler:
+  name: CosineAnnealingWarmRestarts
+
+  StepLR_kwargs:
+    step_size: 10
+    gamma: 0.1
+
+  CosineAnnealingLR_kwargs:
+    T_max: 200
+    eta_min: 1e-4
+
+  CosineAnnealingWarmRestarts_kwargs:
+    T_0: 200
+    T_mult: 1
+    eta_min: 1e-4
+
+dataloader_kwargs:
+  shuffle: true
+  num_workers: 24
+  persistent_workers: true
+  pin_memory: true
+  make_prefetcher: true

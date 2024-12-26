@@ -13,18 +13,29 @@ import pickle
 import re
 import warnings
 from collections import defaultdict
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import click
 import numpy as np
 import PIL.Image
 import torch
 import torch.distributed
+import torch.nn as nn
 import tqdm
 
-import dnnlib
-from torch_utils import distributed as dist
-from training.networks import EDMPrecond
+import diffusion_gmm.dnnlib as dnnlib
+from diffusion_gmm.torch_utils import distributed as dist
+
+
+# Custom unpickler to redirect module references
+class RedirectingUnpickler(pickle.Unpickler):
+    def find_class(self, module, name):
+        print(f"module: {module}, name: {name}")
+        # Redirect the module name if needed
+        if module.startswith("torch_utils"):
+            print(f"Redirecting {module} to diffusion_gmm.{module}")
+            module = f"diffusion_gmm.{module}"  # Replace with your new module's name
+        return super().find_class(module, name)
 
 
 def make_image_np(images: torch.Tensor) -> np.ndarray:
@@ -87,7 +98,7 @@ class StackedRandomGenerator:
 
 
 def edm_sampler(
-    net: EDMPrecond,
+    net: nn.Module,
     rnd: StackedRandomGenerator,
     latents: torch.Tensor,
     class_labels: Optional[torch.Tensor] = None,
@@ -106,10 +117,16 @@ def edm_sampler(
     """
     Proposed EDM sampler (Algorithm 2)
     """
+    if net.__class__.__name__ != "EDMPrecond":
+        raise ValueError(
+            "Network must be an instance of EDMPrecond from EDM work (Karras et al)"
+        )
+
     # Adjust noise levels based on what's supported by the network.
     sigma_min = max(sigma_min, net.sigma_min)
     sigma_max = min(sigma_max, net.sigma_max)
 
+    print(f"sigma_min: {sigma_min}, sigma_max: {sigma_max}")
     # Time step discretization.
     step_indices = torch.arange(num_steps, dtype=torch.float64, device=latents.device)
     t_steps = (
@@ -121,8 +138,8 @@ def edm_sampler(
     t_steps = torch.cat(
         [net.round_sigma(t_steps), torch.zeros_like(t_steps[:1])]
     )  # t_N = 0
-
-    if dist.get_rank() == 0 and dist.get_world_size() == 1:  # TODO: fix this
+    if dist.get_rank() == 0:
+        print(f"t_steps: {t_steps}")
         np.save("t_steps.npy", t_steps.detach().cpu().numpy())
 
     # Initialize lists to store norms and intermediate images
@@ -365,10 +382,11 @@ def main(
     # Load network.
     dist.print0(f'Loading network from "{network_pkl}"...')
     with dnnlib.util.open_url(network_pkl, verbose=(dist.get_rank() == 0)) as f:
-        net = pickle.load(f)["ema"].to(device)
+        net = RedirectingUnpickler(f).load()["ema"].to(device)
 
     dist.print0(f"net: {net}")
 
+    breakpoint()
     # Other ranks follow.
     if dist.get_rank() == 0:
         torch.distributed.barrier()
@@ -403,6 +421,7 @@ def main(
         sampler_kwargs = {
             key: value for key, value in sampler_kwargs.items() if value is not None
         }
+        print(f"sampler_kwargs: {sampler_kwargs}")
         dist.print0(f"sampler_kwargs: {sampler_kwargs}")
         sampler_fn = edm_sampler
         dist.print0(f"sampler_fn: {sampler_fn}")
@@ -422,14 +441,21 @@ def main(
         if snapshot_dict is None:
             continue
 
-        # Unpack and combine snapshot dict
-        for timestep, data in snapshot_dict.items():
-            if timestep not in combined_snapshot_dict:
-                combined_snapshot_dict[timestep] = defaultdict(list)
-            for key, values in data.items():
-                combined_snapshot_dict[timestep][key].extend(values.tolist())
+        # Gather snapshot_dict from all processes
+        gathered_snapshot_dicts: List[Dict[float, Dict[str, Any]]] = [
+            {} for _ in range(dist.get_world_size())
+        ]
+        torch.distributed.all_gather_object(gathered_snapshot_dicts, snapshot_dict)
 
-    # Done
+        # Combine gathered data on rank 0
+        if dist.get_rank() == 0:
+            for gathered_snapshot_dict in gathered_snapshot_dicts:
+                for timestep, data in gathered_snapshot_dict.items():
+                    if timestep not in combined_snapshot_dict:
+                        combined_snapshot_dict[timestep] = defaultdict(list)
+                    for key, values in data.items():
+                        combined_snapshot_dict[timestep][key].extend(values.tolist())
+
     torch.distributed.barrier()
     dist.print0("Done.")
 

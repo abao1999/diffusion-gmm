@@ -2,7 +2,7 @@ import copy
 import logging
 import os
 import warnings
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -97,15 +97,15 @@ def split_dataset_balanced(
     """
     targets = get_targets(dataset)
     class_to_idx = dataset.class_to_idx
-    class_to_indices = {
+    indices_by_class = {
         cls: np.where(targets == class_to_idx[cls])[0].tolist() for cls in class_list
     }
 
     if rng is not None:
-        for indices in class_to_indices.values():
+        for indices in indices_by_class.values():
             rng.shuffle(indices)
 
-    n_samples_per_class = min(len(indices) for indices in class_to_indices.values())
+    n_samples_per_class = min(len(indices) for indices in indices_by_class.values())
     if max_allowed_samples_per_class is not None:
         n_samples_per_class = min(n_samples_per_class, max_allowed_samples_per_class)
 
@@ -115,7 +115,7 @@ def split_dataset_balanced(
     train_size_per_class = int(n_samples_per_class * train_split)
     balanced_train_inds = []
     balanced_test_inds = []
-    for indices in class_to_indices.values():
+    for indices in indices_by_class.values():
         balanced_train_inds.extend(indices[:train_size_per_class])
         balanced_test_inds.extend(indices[train_size_per_class:n_samples_per_class])
 
@@ -177,8 +177,6 @@ def validate_subsets(train_subset: Subset, test_subset: Subset):
     """
     Verify that there are no shared indices between the train and test subsets
     """
-    # train_inds = [i for i, _ in train_subset]
-    # test_inds = [i for i, _ in test_subset]
     train_inds = train_subset.indices
     test_inds = test_subset.indices
     if set(train_inds) & set(test_inds):
@@ -193,7 +191,7 @@ def build_dataloader_for_class(
     num_samples: int = 1000,
     make_prefetcher: bool = False,
     device: str = "cpu",
-) -> DataLoader | DataPrefetcher:
+) -> Union[DataLoader, DataPrefetcher]:
     """
     Build a DataLoader for a specific class from the dataset.
     """

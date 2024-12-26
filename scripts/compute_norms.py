@@ -1,6 +1,6 @@
 import argparse
 import os
-from typing import Optional
+from typing import Optional, Union
 
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
@@ -21,7 +21,7 @@ plt.style.use(["ggplot", "custom_style.mplstyle"])
 
 
 def compute_norm_of_images(
-    dataloader: DataLoader | DataPrefetcher,
+    dataloader: Union[DataLoader, DataPrefetcher],
     device: str = "cpu",
     p: int = 2,
 ) -> np.ndarray:

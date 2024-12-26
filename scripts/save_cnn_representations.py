@@ -28,11 +28,6 @@ def main(cfg):
 
     # Modify the model to output features after the average pooling layer (remove last FC layer)
     model = torch.nn.Sequential(*(list(model.children())[:-1]))
-    # def get_features_hook(module, input, output):
-    #     # Store the output of the hooked layer
-    #     model.features = output
-    # layer_to_hook = model.avgpool  # Example: hooking into the average pooling layer
-    # layer_to_hook.register_forward_hook(get_features_hook)
     model.eval()  # Set model to evaluation mode
 
     print(model)
@@ -56,7 +51,7 @@ def main(cfg):
     targets = np.array(targets)
     # targets = get_targets(dataset) # for case when dataset is not ImageFolder
     class_to_idx = dataset.class_to_idx
-    class_to_indices = {
+    indices_by_class = {
         cls: np.where(targets == class_to_idx[cls])[0].tolist() for cls in class_list
     }
     class_to_idx = dataset.class_to_idx
@@ -64,7 +59,7 @@ def main(cfg):
 
     with torch.no_grad():
         for class_name, indices in tqdm(
-            class_to_indices.items(), desc="Processing classes"
+            indices_by_class.items(), desc="Processing classes"
         ):
             print(f"Class {class_name} has {len(indices)} samples")
             class_dir = os.path.join(save_dir, class_name)

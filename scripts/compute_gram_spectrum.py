@@ -1,7 +1,7 @@
 import argparse
 import os
 import time
-from typing import Tuple
+from typing import Tuple, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -57,7 +57,7 @@ def randomized_svd_batch(
 
 
 def compute_gramian_eigenvalues(
-    dataloader: DataLoader | DataPrefetcher,
+    dataloader: Union[DataLoader, DataPrefetcher],
     device: str = "cpu",
     p: int = 2,
 ) -> np.ndarray:
@@ -155,14 +155,14 @@ if __name__ == "__main__":
     targets = np.array(targets)
     # targets = get_targets(dataset) # for case when dataset is not ImageFolder
     class_to_idx = dataset.class_to_idx
-    class_to_indices = {
+    indices_by_class = {
         cls: np.where(targets == class_to_idx[cls])[0].tolist() for cls in class_list
     }
     class_to_idx = dataset.class_to_idx
     idx_to_class = {v: k for k, v in class_to_idx.items()}
 
     for class_name, indices in tqdm(
-        class_to_indices.items(), desc="Processing classes"
+        indices_by_class.items(), desc="Processing classes"
     ):
         print(f"Class {class_name} has {len(indices)} samples")
 
