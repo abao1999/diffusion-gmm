@@ -15,13 +15,14 @@ import warnings
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple
 
-import click
+import hydra
 import numpy as np
 import PIL.Image
 import torch
 import torch.distributed
 import torch.nn as nn
 import tqdm
+from omegaconf import DictConfig, OmegaConf
 
 import dnnlib
 from torch_utils import distributed as dist
@@ -104,7 +105,7 @@ def edm_sampler(
     n_images_save: int = 16,
 ) -> Tuple[torch.Tensor, Dict[float, Dict[str, Any]]]:
     """
-    Proposed EDM sampler (Algorithm 2)
+    Proposed EDM sampler (Algorithm 2 in EDM paper)
     """
     if net.__class__.__name__ != "EDMPrecond":
         raise ValueError(
@@ -213,154 +214,18 @@ def parse_int_list(s):
     return ranges
 
 
-@click.command()
-@click.option(
-    "--network",
-    "network_pkl",
-    help="Network pickle filename",
-    metavar="PATH|URL",
-    type=str,
-    required=True,
-)
-@click.option(
-    "--save_dir",
-    help="Where to save the output images",
-    metavar="DIR",
-    type=str,
-    required=True,
-)
-@click.option(
-    "--seeds",
-    help="Random seeds (e.g. 1,2,5-10)",
-    metavar="LIST",
-    type=parse_int_list,
-    default="0-63",
-    show_default=True,
-)
-@click.option(
-    "--class",
-    "class_idx",
-    help="Class label  [default: random]",
-    metavar="INT",
-    type=click.IntRange(min=0),
-    default=None,
-)
-@click.option(
-    "--batch",
-    "max_batch_size",
-    help="Maximum batch size",
-    metavar="INT",
-    type=click.IntRange(min=1),
-    default=64,
-    show_default=True,
-)
-@click.option(
-    "--steps",
-    "num_steps",
-    help="Number of sampling steps",
-    metavar="INT",
-    type=click.IntRange(min=1),
-    default=18,
-    show_default=True,
-)
-@click.option(
-    "--sigma_min",
-    help="Lowest noise level  [default: varies]",
-    metavar="FLOAT",
-    type=click.FloatRange(min=0, min_open=True),
-)
-@click.option(
-    "--sigma_max",
-    help="Highest noise level  [default: varies]",
-    metavar="FLOAT",
-    type=click.FloatRange(min=0, min_open=True),
-)
-@click.option(
-    "--rho",
-    help="Time step exponent",
-    metavar="FLOAT",
-    type=click.FloatRange(min=0, min_open=True),
-    default=7,
-    show_default=True,
-)
-@click.option(
-    "--S_churn",
-    "S_churn",
-    help="Stochasticity strength",
-    metavar="FLOAT",
-    type=click.FloatRange(min=0),
-    default=0,
-    show_default=True,
-)
-@click.option(
-    "--S_min",
-    "S_min",
-    help="Stoch. min noise level",
-    metavar="FLOAT",
-    type=click.FloatRange(min=0),
-    default=0,
-    show_default=True,
-)
-@click.option(
-    "--S_max",
-    "S_max",
-    help="Stoch. max noise level",
-    metavar="FLOAT",
-    type=click.FloatRange(min=0),
-    default="inf",
-    show_default=True,
-)
-@click.option(
-    "--S_noise",
-    "S_noise",
-    help="Stoch. noise inflation",
-    metavar="FLOAT",
-    type=float,
-    default=1,
-    show_default=True,
-)
-@click.option(
-    "--snapshot_interval",
-    help="Snapshot interval",
-    metavar="INT",
-    type=click.IntRange(min=1),
-    default=16,
-    show_default=True,
-)
-@click.option(
-    "--snapshot_save_dir",
-    help="Save directory for snapshot images",
-    metavar="DIR",
-    type=str,
-    default=None,
-    show_default=True,
-)
-@click.option(
-    "--n_snapshot_images_save_per_batch",
-    help="Number of snapshot images to save per batch",
-    metavar="INT",
-    type=click.IntRange(min=1),
-    default=1,
-    show_default=True,
-)
-def main(
-    network_pkl,
-    save_dir,
-    seeds,
-    class_idx,
-    max_batch_size,
-    snapshot_interval,
-    snapshot_save_dir,
-    n_snapshot_images_save_per_batch,
-    device=torch.device("cuda"),
-    **sampler_kwargs,
-):
+@hydra.main(config_path="../config", config_name="config", version_base=None)
+def main(cfg: DictConfig):
     """Generate random images using the techniques described in the paper
     "Elucidating the Design Space of Diffusion-Based Generative Models".
     """
+    cfg_dict = OmegaConf.to_container(cfg.edm, resolve=True)
+    print(cfg_dict)  # Print the configuration for debugging
+
     dist.init()
+    seeds = parse_int_list(cfg.edm.seeds)
     num_batches = (
-        (len(seeds) - 1) // (max_batch_size * dist.get_world_size()) + 1
+        (len(seeds) - 1) // (cfg.edm.max_batch_size * dist.get_world_size()) + 1
     ) * dist.get_world_size()
     all_batches = torch.as_tensor(seeds).tensor_split(num_batches)
     rank_batches = all_batches[dist.get_rank() :: dist.get_world_size()]
@@ -369,9 +234,9 @@ def main(
     if dist.get_rank() != 0:
         torch.distributed.barrier()
     # Load network.
-    dist.print0(f'Loading network from "{network_pkl}"...')
-    with dnnlib.util.open_url(network_pkl, verbose=(dist.get_rank() == 0)) as f:
-        net = pickle.load(f)["ema"].to(device)
+    dist.print0(f'Loading network from "{cfg.edm.network_pkl}"...')
+    with dnnlib.util.open_url(cfg.edm.network_pkl, verbose=(dist.get_rank() == 0)) as f:
+        net = pickle.load(f)["ema"].to(cfg.edm.device)
 
     dist.print0(f"net: {net}")
 
@@ -381,7 +246,7 @@ def main(
 
     combined_snapshot_dict = {}
     # Loop over batches.
-    dist.print0(f'Generating {len(seeds)} images to "{save_dir}"...')
+    dist.print0(f'Generating {len(seeds)} images to "{cfg.edm.save_dir}"...')
     for batch_seeds in tqdm.tqdm(
         rank_batches, unit="batch", disable=(dist.get_rank() != 0)
     ):
@@ -391,41 +256,39 @@ def main(
             continue
 
         # Pick latents and labels.
-        rnd = StackedRandomGenerator(device, batch_seeds)
+        rnd = StackedRandomGenerator(cfg.edm.device, batch_seeds)
         latents = rnd.randn(
             [batch_size, net.img_channels, net.img_resolution, net.img_resolution],
-            device=device,
+            device=cfg.edm.device,
         )
         class_labels = None
         if net.label_dim:
-            class_labels = torch.eye(net.label_dim, device=device)[
-                rnd.randint(net.label_dim, size=[batch_size], device=device)
+            class_labels = torch.eye(net.label_dim, device=cfg.edm.device)[
+                rnd.randint(net.label_dim, size=[batch_size], device=cfg.edm.device)
             ]
-        if class_idx is not None:
+        if cfg.edm.class_idx is not None:
             class_labels[:, :] = 0  # type: ignore
-            class_labels[:, class_idx] = 1  # type: ignore
+            class_labels[:, cfg.edm.class_idx] = 1  # type: ignore
 
         # Generate images.
         sampler_kwargs = {
-            key: value for key, value in sampler_kwargs.items() if value is not None
+            key: value for key, value in cfg.sampler.items() if value is not None
         }
         print(f"sampler_kwargs: {sampler_kwargs}")
         dist.print0(f"sampler_kwargs: {sampler_kwargs}")
-        sampler_fn = edm_sampler
-        dist.print0(f"sampler_fn: {sampler_fn}")
 
-        images, snapshot_dict = sampler_fn(
+        images, snapshot_dict = edm_sampler(
             net,
             rnd=rnd,
             latents=latents,
             class_labels=class_labels,
-            snapshot_save_dir=snapshot_save_dir,
-            snapshot_interval=snapshot_interval,
-            n_images_save=n_snapshot_images_save_per_batch,
+            snapshot_save_dir=cfg.snapshots.save_dir,
+            snapshot_interval=cfg.snapshots.interval,
+            n_images_save=cfg.snapshots.n_images_to_save_per_batch,
             **sampler_kwargs,
         )
         # Save images
-        save_images(images, seeds=batch_seeds, save_dir=save_dir)
+        save_images(images, seeds=batch_seeds, save_dir=cfg.edm.save_dir)
         if snapshot_dict is None:
             continue
 
@@ -454,7 +317,8 @@ def main(
 
     # Save the combined snapshot dict as a pickle file
     snapshot_dict_save_path = os.path.join(
-        snapshot_save_dir, f"snapshot_dict_seeds_{seeds[0]}-{seeds[-1]}.pkl"
+        cfg.snapshots.save_dir,
+        f"snapshot_dict_seeds_{seeds[0]}-{seeds[-1]}.pkl",
     )
     with open(snapshot_dict_save_path, "wb") as f:
         pickle.dump(combined_snapshot_dict, f)
@@ -462,9 +326,5 @@ def main(
     dist.print0(f"Combined snapshot dict saved to {snapshot_dict_save_path}")
 
 
-# ----------------------------------------------------------------------------
-
 if __name__ == "__main__":
     main()
-
-# ----------------------------------------------------------------------------

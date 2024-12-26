@@ -1,6 +1,7 @@
 defaults:
   - _self_
   - gmm
+  - edm
   - cnn
   - classifier: default
   - override hydra/hydra_logging: disabled 
