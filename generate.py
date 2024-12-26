@@ -20,11 +20,11 @@ import numpy as np
 import PIL.Image
 import torch
 import torch.distributed
-import torch.nn as nn
 import tqdm
 
 import dnnlib
 from torch_utils import distributed as dist
+from training.networks import EDMPrecond
 
 
 def make_image_np(images: torch.Tensor) -> np.ndarray:
@@ -87,7 +87,7 @@ class StackedRandomGenerator:
 
 
 def edm_sampler(
-    net: nn.Module,
+    net: EDMPrecond,
     rnd: StackedRandomGenerator,
     latents: torch.Tensor,
     class_labels: Optional[torch.Tensor] = None,
@@ -106,11 +106,6 @@ def edm_sampler(
     """
     Proposed EDM sampler (Algorithm 2)
     """
-    if net.__class__.__name__ != "EDMPrecond":
-        raise ValueError(
-            "Network must be an instance of EDMPrecond from EDM work (Karras et al)"
-        )
-
     # Adjust noise levels based on what's supported by the network.
     sigma_min = max(sigma_min, net.sigma_min)
     sigma_max = min(sigma_max, net.sigma_max)

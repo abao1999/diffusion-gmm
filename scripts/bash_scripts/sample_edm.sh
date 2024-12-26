@@ -1,7 +1,7 @@
 CUDA_VISIBLE_DEVICES=4 python scripts/edm_generate.py \
     --save_dir=$WORK/vision_datasets/edm_imagenet64_more/volcano \
     --class=980 \
-    --seeds=0-64 \
+    --seeds=0-63 \
     --batch=64 \
     --steps=256 \
     --S_churn=40 \
