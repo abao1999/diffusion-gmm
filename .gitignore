@@ -19,9 +19,12 @@ tests/figs/
 *_debug.py
 *.mplstyle
 nohup.out
+*.pkl
+
 
 # output and logging files
 output/
+wandb/
 eval_results/
 final_results/
 final_plots/
@@ -33,6 +36,7 @@ evaluation/
 *.safetensors
 */events.out*
 logs/
+**/wandb/*
 **/results/
 **/run/
 **/.ipynb_checkpoints/*
