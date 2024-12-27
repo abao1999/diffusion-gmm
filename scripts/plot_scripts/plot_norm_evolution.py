@@ -28,7 +28,6 @@ def plot_norm_evolution(
     colors = cm.get_cmap(
         "cividis", len(timesteps)
     )  # Using a sequential blue color map for a distinct and easy-on-the-eyes gradient
-    num_timesteps = len(timesteps)
     os.makedirs(save_dir, exist_ok=True)
 
     img_sample_idx = 2048  # Initialize with a float value

@@ -439,7 +439,12 @@ class ClassifierExperiment:
                     f"Built train dataloader using {len(train_loader.dataset)} samples from the training split..."  # type: ignore
                 )
                 logger.info(f"Model: {self.model}")
+                logger.info(f"Model parameters: {self.model.parameters()}")
+                logger.info(f"Criterion: {self.criterion}")
                 logger.info(f"Optimizer: {self.optimizer}")
+                logger.info(
+                    f"Optimizer parameters: {self.optimizer.param_groups[0]['params']}"
+                )
                 logger.info(f"Scheduler: {self.scheduler}")
 
             best_test_loss = float("inf")

@@ -6,7 +6,7 @@ import numpy as np
 import torchvision.transforms as transforms
 
 from diffusion_gmm.image_gmm import ImageGMM
-from diffusion_gmm.utils.data_utils import setup_dataset
+from diffusion_gmm.utils import setup_dataset
 
 
 @hydra.main(config_path="../config", config_name="config", version_base=None)

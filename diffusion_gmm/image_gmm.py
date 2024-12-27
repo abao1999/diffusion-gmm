@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader, Subset
 from torchvision.datasets import DatasetFolder
 from tqdm.auto import tqdm
 
-from diffusion_gmm.utils.data_utils import get_targets
+from diffusion_gmm.utils import get_targets
 
 logger = logging.getLogger(__name__)
 

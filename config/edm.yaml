@@ -1,23 +1,23 @@
 edm:
   network_pkl: https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-imagenet-64x64-cond-adm.pkl
   # directory to save images
-  save_dir: /stor/work/AMDG_Gilpin_Summer2024/vision_datasets/edm_imagenet64_all
+  save_dir: /stor/work/AMDG_Gilpin_Summer2024/vision_datasets/edm_imagenet64
   seeds: "0-63"                       # random seeds
   class_idx: null                     # class index
   max_batch_size: 64                  # maximum batch size
   device: cuda                        # device
 
 sampler:
-  num_steps: 18                       # number of sampling steps
-  sigma_min: null                     # lowest noise level
-  sigma_max: null                     # highest noise level
+  num_steps: 256                      # number of sampling steps
+  sigma_min: 0.002                    # lowest noise level
+  sigma_max: 80                        # highest noise level
   rho: 7                              # time step exponent
-  S_churn: 0                          # stochasticity strength
-  S_min: 0                            # stochastic min noise level
-  S_max: inf                          # stochastic max noise level
-  S_noise: 1                          # stochastic noise inflation
+  S_churn: 40                         # stochasticity strength
+  S_min: 0.05                         # stochastic min noise level
+  S_max: 50                           # stochastic max noise level
+  S_noise: 1.003                      # stochastic noise inflation
 
 snapshots:
-  interval: 16               # snapshot interval
+  interval: 32               # snapshot interval
   save_dir: null             # directory for snapshot images
   n_images_to_save_per_batch: 1 # number of snapshot images to save per batch
