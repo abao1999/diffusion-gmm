@@ -41,6 +41,10 @@ def main(cfg):
             resume=cfg.wandb.resume,
             tags=cfg.wandb.tags,
         )
+        wandb.define_metric("n_train_per_class")
+        wandb.define_metric("best_test_loss", step_metric="n_train_per_class")
+        wandb.define_metric("final_acc", step_metric="n_train_per_class")
+        wandb.define_metric("best_acc", step_metric="n_train_per_class")
 
     # set torch, cuda, and cudnn seeds
     set_seed(cfg.rseed)
@@ -168,7 +172,6 @@ def main(cfg):
             dataloader_kwargs=cfg.classifier.dataloader_kwargs,
             model_save_dir=model_save_dir if run_idx == 0 else None,
             verbose=cfg.classifier.verbose,
-            log_wandb=cfg.wandb.log,
         )
 
         if cfg.wandb.log and not cfg.classifier.sweep_mode:
@@ -183,7 +186,7 @@ def main(cfg):
                 for i in range(len(n_train_per_class_schedule))
             ]
             for key in [
-                "num_train_samples",
+                "n_train_per_class",
                 "accuracy",
                 "best_acc",
                 "test_loss",
@@ -201,6 +204,8 @@ def main(cfg):
 
     # terminate wandb run after training
     if cfg.wandb.log:
+        run.summary.update(combined_results_dict)
+        print(f"updated summary for wandb run {run.id}")
         run.finish()
 
 

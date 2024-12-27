@@ -2,7 +2,7 @@ import glob
 import json
 import os
 from collections import defaultdict
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -12,13 +12,13 @@ plt.style.use(["ggplot", "custom_style.mplstyle"])
 
 def plot_quantity(
     results: Dict[str, Dict[int, List[float]]],
-    num_classes: int,
     save_dir: str,
     save_name: str,
     title: str,
     label: str,
     use_percentage: bool = False,
     legend_loc: str = "upper right",
+    num_classes: Optional[int] = None,
 ) -> None:
     fig, ax1 = plt.subplots(figsize=(4, 3))
 
@@ -36,7 +36,11 @@ def plot_quantity(
         print("num_train_splits: ", num_train_splits)
 
         num_samples_list = list(quantity_dict.keys())
-        num_samples_per_class_list = [x // num_classes for x in num_samples_list]
+        # backwards compatibility with old results that saved total number of train samples instead of per class
+        if num_classes is not None:
+            num_samples_per_class_list = [x // num_classes for x in num_samples_list]
+        else:
+            num_samples_per_class_list = num_samples_list
         quantity_history_list = list(quantity_dict.values())
         if use_percentage:
             quantity_history_list = [np.array(x) * 100 for x in quantity_history_list]
@@ -86,10 +90,10 @@ def plot_quantity(
 
 def plot_results(
     run_json_paths: Dict[str, List[str]],
-    num_classes: int,
     title: str,
     save_dir: str = "plots",
     save_name: str = "loss_accuracy",
+    num_classes: Optional[int] = None,
     plot_best_acc: bool = True,
     sample_splits_to_exclude: List[int] = [],
 ) -> None:
@@ -107,11 +111,18 @@ def plot_results(
                 for group_idx, group in enumerate(num_samples_schedule):
                     num_samples = group[0]
                     print(num_samples)
-                    if num_samples // num_classes in sample_splits_to_exclude:
+                    # backwards compatibility with old results that saved total number of train samples instead of per class
+                    n_train_per_class = (
+                        num_samples // num_classes
+                        if num_classes is not None
+                        else num_samples
+                    )
+                    if n_train_per_class in sample_splits_to_exclude:
                         print(
                             f"Excluding results from train on {num_samples} per class from {run_name}"
                         )
                         continue
+
                     if not all(x == num_samples for x in group):
                         raise ValueError(
                             f"Warning: Not all elements in group {group} are equal."

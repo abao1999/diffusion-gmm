@@ -386,15 +386,14 @@ class ClassifierExperiment:
         rng: np.random.Generator,
         n_train_per_class_schedule: Sequence[int],
         n_test_samples_per_class: int,
-        num_epochs: int = 20,
-        eval_epoch_interval: int = 50,
+        num_epochs: int = 200,
+        eval_epoch_interval: int = 5,
         early_stopping_patience: int = 100,
         batch_size: int = 64,
         dataloader_kwargs: Optional[Dict[str, Any]] = None,
         model_save_dir: Optional[str] = None,
         model_save_name: Optional[str] = None,
         verbose: bool = False,
-        log_wandb: bool = False,
     ) -> List[Dict[str, Any]]:
         """
         Run the classifier experiment
@@ -458,15 +457,16 @@ class ClassifierExperiment:
                     curr_lr = self.optimizer.param_groups[0]["lr"]
                     if verbose:
                         logger.info(
-                            "Epoch %d, Train Loss: %f, Test Loss: %f, Accuracy: %f%%",
+                            "Epoch %d, Train Loss: %f, Test Loss: %f, Accuracy: %f%%, learning rate: %f",
                             epoch,
                             train_loss,
                             test_loss,
                             accuracy * 100,
+                            curr_lr,
                         )
-                        logger.info(f"learning rate: {curr_lr}")
 
-                    if log_wandb:
+                    if wandb.run is not None:
+                        print(f"logging to wandb run {wandb.run.id}")
                         wandb.log(
                             {
                                 "train_loss": train_loss,
@@ -476,39 +476,56 @@ class ClassifierExperiment:
                             },
                             step=epoch,
                         )
+                        print(f"best test loss: {best_test_loss}")
 
                     if accuracy > best_acc:
                         best_acc = accuracy
 
-                    if test_loss < best_test_loss:
+                    if test_loss <= 0.998 * best_test_loss:
                         best_test_loss = test_loss
                         results[i] = {
-                            "num_train_samples": len(train_loader.dataset),  # type: ignore
+                            "n_train_per_class": n_train_per_class,
                             "train_loss": train_loss,
                             "test_loss": test_loss,
                             "accuracy": accuracy,
                             "best_acc": best_acc,
                             "epoch": epoch,
                         }
+                        print("reset early stopping counter")
                         early_stopping_counter = 0  # Reset counter if improvement
                     else:
                         early_stopping_counter += eval_epoch_interval
+                        print(f"early_stopping_counter: {early_stopping_counter}")
 
+                    # early stopping conditions
                     if early_stopping_counter >= early_stopping_patience:
                         logger.info("Early stopping triggered at epoch %d", epoch)
                         logger.info(f"Best test loss: {best_test_loss}")
                         break
 
-                    if train_loss / test_loss < 0.5:
+                    if train_loss < 0.5 * test_loss:
                         logger.info("Generalization gap diverged at epoch %d", epoch)
                         results[i]["generalization_gap_diverged"] = True
+                        break
+
+                    if np.isnan(train_loss) or np.isnan(test_loss):
+                        logger.warning(
+                            f"NaN loss detected at epoch {epoch}, consider lower learning rate"
+                        )
                         break
 
                 if self.scheduler is not None:
                     self.scheduler.step()
 
-            if log_wandb:
-                wandb.log({"last_epoch": epoch})
+            if wandb.run is not None:
+                results_to_log = {
+                    "n_train_per_class": n_train_per_class,
+                    "best_test_loss": best_test_loss,
+                    "final_acc": results[i]["accuracy"],
+                    "best_acc": best_acc,
+                }
+                # metrics defined in train_classifier.py
+                wandb.log(results_to_log)
 
             if model_save_dir is not None:
                 model_save_name = f"n{n_train_per_class}_c{len(self.class_list)}.pth"
@@ -517,8 +534,6 @@ class ClassifierExperiment:
                 os.makedirs(model_save_dir, exist_ok=True)
                 torch.save(
                     {
-                        "best_test_loss": best_test_loss,
-                        "last_epoch": epoch,
                         "model_state_dict": self.model.state_dict(),
                         "optimizer_state_dict": self.optimizer.state_dict(),
                     },
