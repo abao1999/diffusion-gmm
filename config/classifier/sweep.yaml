@@ -38,7 +38,7 @@ command:
   - ${program}
   - ${args_no_hyphens}
   - wandb.log=true
-  - classifier.train_data_dir=/stor/work/AMDG_Gilpin_Summer2024/vision_datasets/edm_imagenet64_all
+  - classifier.train_data_dir=/stor/work/AMDG_Gilpin_Summer2024/vision_datasets/gmm_edm_imagenet64_all
   - classifier.n_props_train=1
   - classifier.n_runs=1
   - classifier.n_train_samples_per_class=1024
@@ -51,7 +51,7 @@ command:
   - classifier.save_name=classifier_sweep
   - classifier.verbose=true
   - rseed=82
-  - run_name=10_class_edm
+  - run_name=10_class_gmm
 
 
 # Example usage:
