@@ -177,8 +177,8 @@ if __name__ == "__main__":
     class_list = args.target_classes
     data_dir = os.path.join(DATA_DIR, args.data_split)
 
-    visualize_eigenfaces(save_dir, class_list, plot_save_dir)
-    exit()
+    # visualize_eigenfaces(save_dir, class_list, plot_save_dir)
+    # exit()
 
     print("Setting up dataset...")
     dataset, is_npy_dataset = setup_dataset(data_dir)

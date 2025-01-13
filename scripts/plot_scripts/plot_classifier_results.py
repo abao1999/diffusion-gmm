@@ -18,12 +18,11 @@ def plot_quantity(
     label: str,
     use_percentage: bool = False,
     legend_loc: str = "upper right",
-    num_classes: Optional[int] = None,
 ) -> None:
     fig, ax1 = plt.subplots(figsize=(4, 3))
 
     os.makedirs(save_dir, exist_ok=True)
-    save_path = os.path.join(save_dir, f"{save_name}.png")
+    save_path = os.path.join(save_dir, f"{save_name}.pdf")
 
     colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
     markers = ["s", "o", "D", "v", "^", "<", ">", "p", "*", "h", "H", "X", "D", "d"]
@@ -35,33 +34,26 @@ def plot_quantity(
         ), "Number of runs must match number of quantities"
         print("num_train_splits: ", num_train_splits)
 
-        num_samples_list = list(quantity_dict.keys())
-        # backwards compatibility with old results that saved total number of train samples instead of per class
-        if num_classes is not None:
-            num_samples_per_class_list = [x // num_classes for x in num_samples_list]
-        else:
-            num_samples_per_class_list = num_samples_list
+        n_train_per_class_list = list(quantity_dict.keys())
         quantity_history_list = list(quantity_dict.values())
         if use_percentage:
             quantity_history_list = [np.array(x) * 100 for x in quantity_history_list]
-        num_samples_per_class_list, quantity_history_list = zip(
-            *sorted(zip(num_samples_per_class_list, quantity_history_list))
+        n_train_per_class_list, quantity_history_list = zip(
+            *sorted(zip(n_train_per_class_list, quantity_history_list))
         )
-        for num_samples_per_class, quantities in zip(
-            num_samples_per_class_list, quantity_history_list
+        for n_train_per_class, quantities in zip(
+            n_train_per_class_list, quantity_history_list
         ):  # type: ignore
-            print(
-                f"{len(quantities)} runs for {num_samples_per_class} samples per class"
-            )
+            print(f"{len(quantities)} runs for {n_train_per_class} samples per class")
         mean_quantities_list = np.array(
             [np.mean(quantities) for quantities in quantity_history_list]
         )
         std_quantities_list = np.array(
             [np.std(quantities) for quantities in quantity_history_list]
         )
-        print(num_samples_per_class_list)
+        print(n_train_per_class_list)
         ax1.plot(
-            num_samples_per_class_list,
+            n_train_per_class_list,
             mean_quantities_list,
             label=run_name,
             marker=markers[i],
@@ -70,7 +62,7 @@ def plot_quantity(
             color=colors[i],
         )
         ax1.fill_between(
-            num_samples_per_class_list,
+            n_train_per_class_list,
             mean_quantities_list - std_quantities_list,
             mean_quantities_list + std_quantities_list,
             alpha=0.2,
@@ -106,34 +98,42 @@ def plot_results(
             print(f"Processing {json_path}")
             with open(json_path, "r") as f:
                 results_dict = json.load(f)["results"]
-                num_samples_schedule = results_dict["num_train_samples"]
-
-                for group_idx, group in enumerate(num_samples_schedule):
-                    num_samples = group[0]
-                    print(num_samples)
+                if "n_train_per_class" in results_dict:
+                    n_train_per_class_schedule = results_dict["n_train_per_class"]
+                else:
                     # backwards compatibility with old results that saved total number of train samples instead of per class
-                    n_train_per_class = (
-                        num_samples // num_classes
-                        if num_classes is not None
-                        else num_samples
-                    )
+                    if num_classes is None:
+                        raise ValueError(
+                            "num_classes must be provided when using old results"
+                        )
+                    # n_train_per_class_schedule = (
+                    #     np.array(results_dict["num_train_samples"]) // num_classes
+                    # ).tolist()
+                    n_train_per_class_schedule = [
+                        (np.array(ns) // num_classes).tolist()
+                        for ns in results_dict["num_train_samples"]
+                    ]
+                print(n_train_per_class_schedule)
+                for group_idx, group in enumerate(n_train_per_class_schedule):
+                    n_train_per_class = group[0]
+                    print(n_train_per_class)
                     if n_train_per_class in sample_splits_to_exclude:
                         print(
-                            f"Excluding results from train on {num_samples} per class from {run_name}"
+                            f"Excluding results from train on {n_train_per_class} per class from {run_name}"
                         )
                         continue
 
-                    if not all(x == num_samples for x in group):
+                    if not all(x == n_train_per_class for x in group):
                         raise ValueError(
                             f"Warning: Not all elements in group {group} are equal."
                         )
 
-                    accuracy[run_name][num_samples].extend(
+                    accuracy[run_name][n_train_per_class].extend(
                         results_dict["best_acc"][group_idx]
                         if "best_acc" in results_dict and plot_best_acc
                         else results_dict["accuracy"][group_idx]
                     )
-                    test_loss[run_name][num_samples].extend(
+                    test_loss[run_name][n_train_per_class].extend(
                         results_dict["test_loss"][group_idx]
                         if "test_loss" in results_dict
                         else []
@@ -141,7 +141,6 @@ def plot_results(
 
     plot_quantity(
         results=accuracy,  # type: ignore
-        num_classes=num_classes,
         save_name=f"{save_name}_accuracy",
         title=title,
         label="Test Acc (%)",
@@ -152,7 +151,6 @@ def plot_results(
 
     plot_quantity(
         results=test_loss,  # type: ignore
-        num_classes=num_classes,
         save_name=f"{save_name}_test_loss",
         title=title,
         label="Test Loss",
@@ -161,11 +159,12 @@ def plot_results(
 
 
 if __name__ == "__main__":
-    model_name = "LinearMulticlassClassifier"
+    # model_name = "LinearMulticlassClassifier"
     # run_name = "goldfinch-patas_monkey-trimaran-tabby"
+    # # run_name = "church-tench-english_springer-french_horn"
     # n_classes = 4
-    run_name = "20_classes"
-    n_classes = 20
+    # # # run_name = "10_classes"
+    # # # n_classes = 10
 
     # # class_list = ["church", "tench", "english_springer", "french_horn"]
     # class_list = [
@@ -178,16 +177,14 @@ if __name__ == "__main__":
     # n_classes = len(class_list)
     # run_name = "-".join(class_list)
 
-    # model_name = "LinearBinaryClassifier"
-    # class_list = ["kimono", "baseball"]
-    # n_classes = len(class_list)
-    # run_name = "-".join(class_list)
+    model_name = "LinearBinaryClassifier"
+    class_list = ["goldfinch", "trimaran"]
+    n_classes = len(class_list)
+    run_name = "-".join(class_list)
 
     print(run_name)
 
-    json_dir = os.path.join(
-        "results/classifier", f"{model_name}_softmax_nobias", run_name
-    )
+    json_dir = os.path.join("results/classifier", f"{model_name}", f"{run_name}")
     print(json_dir)
     run_json_paths = {
         "Diffusion": glob.glob(
@@ -209,11 +206,11 @@ if __name__ == "__main__":
     save_name = f"{model_name}_{run_name}"
     plot_results(
         run_json_paths,
-        num_classes=n_classes,
+        # num_classes=n_classes,
         title="Linear Classifier",
         save_dir="final_plots/classifier",
         save_name=save_name,
         plot_best_acc=True,
         # sample_splits_to_exclude=[512, 128, 1024],
-        sample_splits_to_exclude=[1024],
+        # sample_splits_to_exclude=[4096],
     )

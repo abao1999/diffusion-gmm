@@ -6,6 +6,7 @@ tests/another_playground.py
 data/
 figs/
 tests/figs/
+notebooks/
 *.arrow
 *.csv
 *.png

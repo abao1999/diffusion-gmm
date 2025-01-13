@@ -111,15 +111,15 @@ def plot_norm_evolution(
             s=50,
             alpha=1.0,
             edgecolor="black",
-            label=rf"$\sigma_{{{timestep_indices[i]}}} = {timesteps[i]:.3f}$",
+            label=rf"$t_{{{timestep_indices[i]}}} = {timesteps[i]:.3f}$",
         )
-    axs[0].set_title("Noise Schedule", fontsize=12)
+    axs[0].set_title(r"Noise Schedule $\mathbf{\sigma(t_i) = t_i}$", fontsize=12)
     # axs[0].set_ylabel(
     #     r"$\mathbf{\sigma(t_i) = t_i}$ (log scale)",
     #     fontsize=12,
     # )
     axs[0].set_yscale("log")
-    axs[0].set_xlabel("Sampling Step", fontsize=10)
+    axs[0].set_xlabel("Sampling Step (i)", fontsize=10)
 
     # Add a new subplot for the legend of axs[0]
     axs[4].legend(
@@ -133,14 +133,14 @@ def plot_norm_evolution(
     # Intermediate Images
     axs[1].imshow(combined_image_x_cur)
     axs[1].axis("off")  # Hide the axis
-    axs[1].set_title(r"Intermediate Images $\mathbf{x_i}$", fontsize=12)
+    axs[1].set_title(r"Intermediate Images $\mathbf{x^{(i)}}$", fontsize=12)
 
     # Output of Denoiser
     axs[2].imshow(combined_image_x_denoised)
     axs[2].axis("off")  # Hide the y-axis for the denoised output image
     axs[2].set_xlabel("Sampling Step", fontsize=10)
     axs[2].set_title(
-        r"Output of Denoiser $\mathbf{D_{\theta}({x_{i+1}, t_{i+1}})}$",
+        r"Output of Denoiser $\mathbf{D_{\theta}}$ After Euler Step",
         fontsize=12,
     )
 
@@ -149,7 +149,7 @@ def plot_norm_evolution(
     axs[3].axis("off")  # Hide the axis
     axs[3].set_xlabel("Sampling Step", fontsize=10)
     axs[3].set_title(
-        r"Instantaneous Change $\mathbf{\frac{d x}{dt}|_{\hat{t_{i}}}}$",
+        r"Instantaneous Change $\mathbf{d_i}$",
         fontsize=12,
     )
 
@@ -164,7 +164,7 @@ def plot_norm_evolution(
             edgecolor="black",
             label=f"Timestep {timestep}",
         )
-    axs[5].set_title(r"Norm of $\mathbf{x_i}$", fontsize=12)
+    axs[5].set_title(r"Norm of $\mathbf{x^{(i)}}$", fontsize=12)
     axs[5].set_ylabel("Count", fontsize=10, fontweight="bold")
     axs[5].set_xlabel(r"$\ell_2$ Norm (log scale)", fontsize=10)
     axs[5].set_xscale("log")
@@ -181,7 +181,7 @@ def plot_norm_evolution(
             label=f"Timestep {timestep}",
         )
     axs[6].set_title(
-        r"Norm of $\mathbf{D_{\theta}({x_{i+1}, t_{i+1}})}$",
+        r"Norm of $\mathbf{D_{\theta}}$",
         fontsize=12,
     )
     axs[6].set_ylabel("Count", fontsize=10, fontweight="bold")
@@ -198,8 +198,12 @@ def plot_norm_evolution(
             histtype="stepfilled",
             label=f"Timestep {timestep}",
         )
+    # axs[7].set_title(
+    #     r"Norm of $\mathbf{\frac{d x}{dt}|_{\hat{t_{i}}}}$",
+    #     fontsize=12,
+    # )
     axs[7].set_title(
-        r"Norm of $\mathbf{\frac{d x}{dt}|_{\hat{t_{i}}}}$",
+        r"Norm of $\mathbf{d_i}$",
         fontsize=12,
     )
     axs[7].set_ylabel("Count", fontsize=10, fontweight="bold")
@@ -210,14 +214,14 @@ def plot_norm_evolution(
     plt.tight_layout()  # Adjust layout to prevent overlap
 
     plt.savefig(
-        os.path.join(save_dir, "norm_evolution.pdf"),
+        os.path.join(save_dir, "norm_evolution.png"),
         dpi=300,
         bbox_inches="tight",
     )
 
 
 if __name__ == "__main__":
-    class_name = "goldfinch_old"
+    class_name = "goldfinch"
     data_split = "edm_imagenet64_snapshots"
     data_dir = os.path.join(DATA_DIR, data_split, class_name)
     snapshot_dict_paths = [
@@ -240,6 +244,9 @@ if __name__ == "__main__":
                 )
                 snapshot_dict[timestep]["norms_denoised"] = np.concatenate(
                     (snapshot_dict[timestep]["norms_denoised"], data["norms_denoised"])
+                )
+                snapshot_dict[timestep]["norms_dxdt"] = np.concatenate(
+                    (snapshot_dict[timestep]["norms_dxdt"], data["norms_dxdt"])
                 )
 
     plot_norm_evolution(snapshot_dict, snapshot_image_dir=data_dir, save_dir="figs")

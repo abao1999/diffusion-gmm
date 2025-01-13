@@ -1,5 +1,5 @@
 program: scripts/train_classifier.py
-name: classifier_sweep
+name: classifier_sweep_representations
 project: diffusion-gmm
 
 method: bayes  # Bayesian optimization
@@ -15,16 +15,16 @@ parameters:
 
   classifier.lr:
     distribution: uniform
-    max: 4e-3
-    min: 4e-4
+    max: 5e-2
+    min: 5e-3
 
   classifier.scheduler.CosineAnnealingWarmRestarts_kwargs.T_0:
     values: [200, 300, 600]
 
   classifier.scheduler.CosineAnnealingWarmRestarts_kwargs.eta_min:
     distribution: uniform
-    max: 4e-4
-    min: 4e-5
+    max: 5e-3
+    min: 1e-4
 
 run_cap: 10
 
@@ -39,21 +39,23 @@ command:
   - ${program}
   - ${args_no_hyphens}
   - wandb.log=true
-  - classifier.train_data_dir=/stor/work/AMDG_Gilpin_Summer2024/vision_datasets/edm_imagenet64_all
+  - classifier.train_data_dir=/stor/work/AMDG_Gilpin_Summer2024/vision_datasets/gmm_representations
+  - classifier.class_list=[church,tench,english_springer,french_horn]
   - classifier.n_props_train=1
   - classifier.n_runs=1
-  - classifier.n_train_samples_per_class=2048
+  - classifier.n_train_samples_per_class=1024
   - classifier.n_test_samples_per_class=1024
-  - classifier.train_split=0.8
+  - classifier.train_split=0.5
+  - classifier.criterion=CrossEntropyLoss
   - classifier.model.output_logit=true
-  - classifier.model.use_bias=false
+  - classifier.model.use_bias=true
   - classifier.sweep_mode=true
-  - classifier.save_dir=results/classifier_sweeps
-  - classifier.save_name=classifier_sweep
+  - classifier.save_dir=results/classifier_sweeps_gmm_representations
+  - classifier.save_name=classifier_sweep_gmm_representations_ce
   - classifier.verbose=true
-  - rseed=82
-  - run_name=10_class_edm_n2048
+  - rseed=88
+  - run_name=4_class_gmm_representations_ce
 
 
 # Example usage:
-# wandb sweep config/classifier/sweep.yaml
+# wandb sweep config/classifier/sweep_representations.yaml

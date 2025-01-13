@@ -106,7 +106,7 @@ def plot_norms(
                 density=False,
                 label=target_class,
                 color=colors[i],
-                alpha=0.4,
+                alpha=0.3,
             )
             # # Add an arrow at the minimum value of image_norms with lower zorder
             # min_value = np.min(image_norms)
@@ -124,7 +124,7 @@ def plot_norms(
         # plt.scatter([], [], color="black", marker="|", s=100, label="Min value")
 
         p_label = r"\infty" if p == float("inf") else str(p)
-        plt.title(r"$\ell_{" + p_label + r"}$ Norms")
+        plt.title(r"$\ell_{" + p_label + r"}$ Norm")
         plt.xlabel(r"$\ell_{" + p_label + r"}$ Norm")
         plt.ylabel("Count" if not use_log_scale else "Count (log scale)")
         if use_log_scale:
@@ -134,7 +134,7 @@ def plot_norms(
         plt.savefig(
             os.path.join(
                 plot_save_dir,
-                f"{run_name if plot_name is None else plot_name}_{p}-norms.png",
+                f"{run_name if plot_name is None else plot_name}_{p}-norms.pdf",
             ),
             dpi=300,
         )
@@ -167,19 +167,35 @@ if __name__ == "__main__":
     save_dir = os.path.join(args.data_save_dir, args.data_split)
     os.makedirs(save_dir, exist_ok=True)
 
-    class_list = args.target_classes
-    run_name = "-".join(class_list)
+    if args.target_classes == ["all"]:
+        class_list = [
+            "baseball",
+            "church",
+            "english_springer",
+            "french_horn",
+            "garbage_truck",
+            "goldfinch",
+            "kimono",
+            "salamandra",
+            "tabby",
+            "tench",
+        ]
+    else:
+        class_list = args.target_classes
+    # run_name = "-".join(class_list)
+    n_classes = len(class_list)
+    run_name = f"{n_classes}_classes"
 
-    # plot_norms(
-    #     save_dir,
-    #     class_list,
-    #     plot_save_dir,
-    #     args.p,
-    #     plot_separately=False,
-    #     plot_name=args.plot_name,
-    #     use_log_scale=False,
-    # )
-    # exit()
+    plot_norms(
+        save_dir,
+        class_list,
+        plot_save_dir,
+        args.p,
+        plot_separately=False,
+        plot_name=run_name,
+        use_log_scale=False,
+    )
+    exit()
 
     print(f"Computing norms for {run_name}...")
     data_dir = os.path.join(DATA_DIR, args.data_split)

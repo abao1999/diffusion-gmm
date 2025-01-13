@@ -1,10 +1,10 @@
 cnn:
-  data_dir: $WORK/vision_datasets/imagenette64
+  data_dir: /stor/work/AMDG_Gilpin_Summer2024/vision_datasets/imagenette64
   class_list: null
   n_samples_per_class: 1024
   model_id: resnet50
   hook_layer: avgpool
-  save_dir: $WORK/vision_datasets/representations
+  save_dir: /stor/work/AMDG_Gilpin_Summer2024/vision_datasets/representations
   save_as_pt: false
 
   batch_size: 64

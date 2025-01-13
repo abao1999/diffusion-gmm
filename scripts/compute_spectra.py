@@ -1,5 +1,5 @@
 import os
-from typing import Dict, Optional
+from typing import Dict
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -14,14 +14,13 @@ def plot_spectra_from_multiple_npy(
     num_cols: int = 4,
     save_dir: str = "figs",
     save_name: str = "cov_spectra_combined",
-    scale_factor: Optional[float] = None,
-    log_scale_x: bool = False,
+    density: bool = True,
 ):
     """
     Plot spectra of Gram matrices from multiple diffusion and GMM paths.
     """
     os.makedirs(save_dir, exist_ok=True)
-    save_path = os.path.join(save_dir, f"{save_name}.png")
+    save_path = os.path.join(save_dir, f"{save_name}.pdf")
 
     num_classes = len(spectra_paths)
     # Determine the number of rows and columns for the grid
@@ -36,29 +35,27 @@ def plot_spectra_from_multiple_npy(
         zip(axes, spectra_paths.items())
     ):
         if os.path.isfile(spectra_path):
-            spectra_eigenvalues: np.ndarray = np.load(spectra_path)
+            eigenvalues: np.ndarray = np.load(spectra_path)
         else:
             raise ValueError(f"File {spectra_path} does not exist")
-        # not_small = np.where(spectra_eigenvalues > 1e-6)[0]
+        # not_small = np.where(eigenvalues > 1e-6)[0]
         # print(f"Number of not small eigenvalues: {len(not_small)}")
-        # spectra_eigenvalues = spectra_eigenvalues[not_small]
-        print(f"spectra_eigenvalues shape: {spectra_eigenvalues.shape}")
-        print(f"Loaded {class_name} with shape {spectra_eigenvalues.shape}")
-        if scale_factor is not None:
-            spectra_eigenvalues = spectra_eigenvalues**scale_factor  # type: ignore
-            xlabel = r"Scaled Eigenvalue $\lambda^{{{}}}$".format(scale_factor)  # type: ignore
-        else:
-            xlabel = r"Eigenvalue $\lambda$"
+        # eigenvalues = eigenvalues[not_small]
+        print(f"eigenvalues shape: {eigenvalues.shape}")
+        print(f"Loaded {class_name} with shape {eigenvalues.shape}")
 
-        # # Combine all eigenvalues for bin calculation
-        # combined_eigenvalues = np.concatenate([spectra_eigenvalues])
-        # bins = np.histogram_bin_edges(combined_eigenvalues, bins=n_bins)
+        min_eig = eigenvalues.min()
+        if min_eig < 1e-20:
+            min_eig = 1e-20
+        max_eig = eigenvalues.max()
+        print(f"min_eig: {min_eig}, max_eig: {max_eig}")
+        bins = np.logspace(np.log10(min_eig), np.log10(max_eig), num=n_bins)
 
         # Plot spectra eigenvalues
         ax.hist(
-            spectra_eigenvalues,
-            bins=n_bins,
-            density=True,
+            eigenvalues,
+            bins=bins,
+            density=density,
             histtype="stepfilled",
             alpha=0.8,
             label="Diffusion",
@@ -67,15 +64,14 @@ def plot_spectra_from_multiple_npy(
         # Plot GMM eigenvalues
         ax.set_title(class_name.replace("_", " ").title(), fontweight="bold")
         if idx % num_cols == 0:  # First plot in each row
-            ax.set_ylabel(r"Density (log scale)", fontweight="bold")
+            if density:
+                ax.set_ylabel("Density (log scale)", fontweight="bold")
+            else:
+                ax.set_ylabel("Count (log scale)", fontweight="bold")
         ax.set_yscale("log")
         ax.grid(False)
-        # ax.legend()
-        if log_scale_x:
-            ax.set_xscale("log")
-            ax.set_xlabel(f"{xlabel} (log scale)")
-        else:
-            ax.set_xlabel(xlabel)
+        ax.set_xscale("log")
+        ax.set_xlabel("Eigenvalue (log scale)")
 
     # Hide any unused subplots
     for ax in axes[len(spectra_paths) :]:
@@ -99,8 +95,8 @@ def compute_and_save_spectra(cov_path: str, class_name: str, save_dir: str):
 
 
 if __name__ == "__main__":
-    # dataset_name = "edm_imagenet64_all"
-    dataset_name = "representations"
+    dataset_name = "edm_imagenet64_all"
+    # dataset_name = "representations"
     stats_dir = os.path.join(DATA_DIR, "computed_stats", dataset_name)
     spectra_dir = os.path.join(stats_dir, "spectra")
     eigenvalues_paths_dict = {}
@@ -116,9 +112,8 @@ if __name__ == "__main__":
         n_bins=100,
         num_cols=4,
         save_dir="final_plots",
-        save_name="representations_eigenvalues_spectra_combined",
-        scale_factor=None,
-        log_scale_x=False,
+        save_name=f"{dataset_name}_eigenvalues_spectra_combined",
+        density=False,
     )
     exit()
 

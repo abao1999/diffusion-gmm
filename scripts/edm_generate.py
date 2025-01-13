@@ -103,6 +103,7 @@ def edm_sampler(
     snapshot_interval: int = 1,
     snapshot_save_dir: Optional[str] = None,
     n_images_save: int = 16,
+    verbose: bool = False,
 ) -> Tuple[torch.Tensor, Dict[float, Dict[str, Any]]]:
     """
     Proposed EDM sampler (Algorithm 2 in EDM paper)
@@ -129,7 +130,8 @@ def edm_sampler(
         [net.round_sigma(t_steps), torch.zeros_like(t_steps[:1])]
     )  # t_N = 0
     if dist.get_rank() == 0:
-        print(f"t_steps: {t_steps}")
+        if verbose:
+            print(f"t_steps: {t_steps}")
         np.save("t_steps.npy", t_steps.detach().cpu().numpy())
 
     # Initialize lists to store norms and intermediate images
@@ -184,9 +186,10 @@ def edm_sampler(
                     snapshot_save_subdir = os.path.join(
                         snapshot_save_dir, snapshot_name, f"step_{i:03d}"
                     )
-                    dist.print0(
-                        f"Saving batch of snapshot images of shape {snapshot_images.shape} to {snapshot_save_subdir}"
-                    )
+                    if verbose:
+                        dist.print0(
+                            f"Saving batch of snapshot images of shape {snapshot_images.shape} to {snapshot_save_subdir}"
+                        )
                     save_images(
                         snapshot_images,
                         seeds=save_seeds,
@@ -238,7 +241,7 @@ def main(cfg: DictConfig):
     with dnnlib.util.open_url(cfg.edm.network_pkl, verbose=(dist.get_rank() == 0)) as f:
         net = pickle.load(f)["ema"].to(cfg.edm.device)
 
-    dist.print0(f"net: {net}")
+    # dist.print0(f"net: {net}")
 
     # Other ranks follow.
     if dist.get_rank() == 0:
@@ -274,8 +277,7 @@ def main(cfg: DictConfig):
         sampler_kwargs = {
             key: value for key, value in cfg.sampler.items() if value is not None
         }
-        print(f"sampler_kwargs: {sampler_kwargs}")
-        dist.print0(f"sampler_kwargs: {sampler_kwargs}")
+        # dist.print0(f"sampler kwargs: {sampler_kwargs}")
 
         images, snapshot_dict = edm_sampler(
             net,
@@ -285,6 +287,7 @@ def main(cfg: DictConfig):
             snapshot_save_dir=cfg.snapshots.save_dir,
             snapshot_interval=cfg.snapshots.interval,
             n_images_save=cfg.snapshots.n_images_to_save_per_batch,
+            verbose=False,
             **sampler_kwargs,
         )
         # Save images

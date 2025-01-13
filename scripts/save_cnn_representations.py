@@ -36,7 +36,7 @@ def main(cfg):
 
     transform = transforms.Compose(
         [
-            transforms.Resize((224, 224)),
+            # transforms.Resize((224, 224)),
             transforms.ToTensor(),
         ]
     )

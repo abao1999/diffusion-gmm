@@ -131,13 +131,18 @@ def main(cfg):
             cfg.classifier.n_props_train == cfg.classifier.n_runs == 1
         ), "Sweep mode is enabled, so n_props_train and n_runs must be 1"
 
-    n_train_per_class_schedule = (
-        np.linspace(1.0, 0.05, cfg.classifier.n_props_train)
-        * cfg.classifier.n_train_samples_per_class
-    ).astype(int)
-    # n_train_per_class_schedule = np.array(
-    #     [2048, 1658, 1269, 880, 491, 256, 102]
-    # ).astype(int)
+    if cfg.classifier.sweep_mode:
+        n_train_per_class_schedule = np.array(
+            [cfg.classifier.n_train_samples_per_class]
+        ).astype(int)
+    else:
+        n_train_per_class_schedule = (
+            np.linspace(1.0, 0.05, cfg.classifier.n_props_train)
+            * cfg.classifier.n_train_samples_per_class
+        ).astype(int)
+        # n_train_per_class_schedule = np.array(
+        #     [4096, 3072, 2048, 1658, 1269, 880, 491, 256, 102]
+        # ).astype(int)
 
     logger.info(
         f"Running classifier experiment, {cfg.classifier.class_list} classes, "
@@ -176,7 +181,11 @@ def main(cfg):
 
         if cfg.wandb.log and not cfg.classifier.sweep_mode:
             for i, n_train_per_class in enumerate(n_train_per_class_schedule):
-                wandb.log(result_dict_lst[i], step=n_train_per_class)
+                print(f"logging result for n_train_per_class: {n_train_per_class}")
+                print(
+                    f"check n_train_per_class: {result_dict_lst[i]['n_train_per_class']}"
+                )
+                wandb.log(result_dict_lst[i])
 
         results_all_runs.append(result_dict_lst)
 
