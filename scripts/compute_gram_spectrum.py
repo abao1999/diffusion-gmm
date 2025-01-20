@@ -255,20 +255,20 @@ if __name__ == "__main__":
     #     plot_title=f"{len(args.target_classes)} Classes",
     # )
     # exit()
-    spectra_fnames = {
-        "4 Classes": "4classes_mixture_n2048_gramian_eigenvalues.npy",
-        "10 Classes": "10classes_mixture_n512_gramian_eigenvalues.npy",
-        "20 Classes": "20classes_mixture_n512_gramian_eigenvalues.npy",
-    }
-    plot_spectra_from_multiple_npy(
-        data_dir=args.data_save_dir,
-        spectra_fnames=spectra_fnames,
-        n_bins=100,
-        num_cols=3,
-        save_dir=plot_save_dir,
-        density=True,
-    )
-    exit()
+    # spectra_fnames = {
+    #     "4 Classes": "4classes_mixture_n2048_gramian_eigenvalues.npy",
+    #     "10 Classes": "10classes_mixture_n512_gramian_eigenvalues.npy",
+    #     "20 Classes": "20classes_mixture_n512_gramian_eigenvalues.npy",
+    # }
+    # plot_spectra_from_multiple_npy(
+    #     data_dir=args.data_save_dir,
+    #     spectra_fnames=spectra_fnames,
+    #     n_bins=100,
+    #     num_cols=3,
+    #     save_dir=plot_save_dir,
+    #     density=True,
+    # )
+    # exit()
 
     save_dir = os.path.join(args.data_save_dir, args.data_split)
     os.makedirs(save_dir, exist_ok=True)

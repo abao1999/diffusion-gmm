@@ -39,18 +39,30 @@ def make_image_np(images: torch.Tensor) -> np.ndarray:
     )
 
 
-def save_images(images: torch.Tensor, seeds: torch.Tensor, save_dir: str) -> None:
+def save_images(
+    images: torch.Tensor,
+    seeds: torch.Tensor,
+    save_dir: str,
+    save_npy: bool = False,
+) -> None:
     os.makedirs(save_dir, exist_ok=True)
-    images_np = make_image_np(images)
+    if save_npy:  # kind of janky, but it works
+        images_np = images.cpu().numpy()
+    else:
+        images_np = make_image_np(images)
     for seed, image_np in zip(seeds, images_np):
-        image_path = os.path.join(save_dir, f"{seed:06d}.png")
-        if image_np.shape[2] == 1:
-            warnings.warn(
-                "Saving a single channel image. This is not recommended for most use cases."
-            )
-            PIL.Image.fromarray(image_np[:, :, 0], "L").save(image_path)
+        if save_npy:
+            image_path = os.path.join(save_dir, f"{seed:06d}.npy")
+            np.save(image_path, image_np)
         else:
-            PIL.Image.fromarray(image_np, "RGB").save(image_path)
+            image_path = os.path.join(save_dir, f"{seed:06d}.png")
+            if image_np.shape[2] == 1:
+                warnings.warn(
+                    "Saving a single channel image. This is not recommended for most use cases."
+                )
+                PIL.Image.fromarray(image_np[:, :, 0], "L").save(image_path)
+            else:
+                PIL.Image.fromarray(image_np, "RGB").save(image_path)
 
 
 class StackedRandomGenerator:
@@ -103,6 +115,7 @@ def edm_sampler(
     snapshot_interval: int = 1,
     snapshot_save_dir: Optional[str] = None,
     n_images_save: int = 16,
+    save_snapshots_as_npy: bool = False,
     verbose: bool = False,
 ) -> Tuple[torch.Tensor, Dict[float, Dict[str, Any]]]:
     """
@@ -194,6 +207,7 @@ def edm_sampler(
                         snapshot_images,
                         seeds=save_seeds,
                         save_dir=snapshot_save_subdir,
+                        save_npy=save_snapshots_as_npy,
                     )
 
     return x_next, snapshot_dict
@@ -287,7 +301,7 @@ def main(cfg: DictConfig):
             snapshot_save_dir=cfg.snapshots.save_dir,
             snapshot_interval=cfg.snapshots.interval,
             n_images_save=cfg.snapshots.n_images_to_save_per_batch,
-            verbose=False,
+            save_snapshots_as_npy=cfg.snapshots.save_snapshots_as_npy,
             **sampler_kwargs,
         )
         # Save images

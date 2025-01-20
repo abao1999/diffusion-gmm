@@ -24,6 +24,7 @@ def compute_norm_of_images(
     dataloader: Union[DataLoader, DataPrefetcher],
     device: str = "cpu",
     p: int = 2,
+    compute_pixelwise: bool = False,
 ) -> np.ndarray:
     """
     Dataloader is for a specific class.
@@ -34,14 +35,20 @@ def compute_norm_of_images(
     for images, _ in tqdm(dataloader, desc="Computing norms"):
         images = images.to(device)
         batch_size = images.size(0)
-        norms = torch.norm(images.view(batch_size, -1), p=p, dim=1)
+        if compute_pixelwise:
+            # comptue norm across channel dimension, then flatten
+            norms = torch.norm(images, p=p, dim=1).flatten()
+        else:
+            norms = torch.norm(images.view(batch_size, -1), p=p, dim=1)
         image_norms.extend(norms.tolist())
-
-    return np.array(image_norms)
+    res = np.array(image_norms)
+    print("shape of computed norms:", res.shape)
+    return res
 
 
 def plot_norms(
     data_dir,
+    filename_suffix: str,
     class_list: list[str],
     plot_save_dir: str,
     p: int,
@@ -52,7 +59,7 @@ def plot_norms(
     os.makedirs(plot_save_dir, exist_ok=True)
     run_name = "-".join(class_list)
     norm_npy_paths = [
-        os.path.join(data_dir, f"{target_class}_{args.p}-norms.npy")
+        os.path.join(data_dir, f"{target_class}{filename_suffix}.npy")
         for target_class in class_list
     ]
     print(f"existing saved norm filepaths: {norm_npy_paths}")
@@ -67,6 +74,7 @@ def plot_norms(
         for i, (target_class, norm_npy_path) in enumerate(
             zip(class_list, norm_npy_paths)
         ):
+            print("loading from: ", norm_npy_path)
             image_norms = np.load(norm_npy_path)
             axes[i].hist(image_norms, bins=50, density=False, label=target_class)
             axes[i].set_title(target_class.replace("_", " ").capitalize())
@@ -79,7 +87,7 @@ def plot_norms(
         plt.savefig(
             os.path.join(
                 plot_save_dir,
-                f"{run_name if plot_name is None else plot_name}_{p}-norms_separate.png",
+                f"{run_name if plot_name is None else plot_name}{filename_suffix}_separate.png",
             ),
             dpi=300,
         )
@@ -93,10 +101,11 @@ def plot_norms(
 
         print("colors:", colors)
         plt.figure(figsize=(4, 3))
-        for i, target_class in enumerate(class_list):
-            image_norms = np.load(
-                os.path.join(data_dir, f"{target_class}_{p}-norms.npy")
-            )
+        for i, (target_class, norm_npy_path) in enumerate(
+            zip(class_list, norm_npy_paths)
+        ):
+            print("loading from: ", norm_npy_path)
+            image_norms = np.load(norm_npy_path)
             print("class:", target_class)
             print("Image norms shape:", image_norms.shape)
             print("min, max:", np.min(image_norms), np.max(image_norms))
@@ -108,20 +117,6 @@ def plot_norms(
                 color=colors[i],
                 alpha=0.3,
             )
-            # # Add an arrow at the minimum value of image_norms with lower zorder
-            # min_value = np.min(image_norms)
-            # plt.annotate(
-            #     "",
-            #     xy=(min_value, 0),
-            #     xytext=(min_value, -5),  # Adjust the y position for the arrow tail
-            #     arrowprops=dict(
-            #         facecolor=colors[i], shrink=0.05, width=2, headwidth=4, alpha=0.5
-            #     ),
-            #     zorder=1,  # Lower zorder to ensure axis markings are on top
-            # )
-
-        # # Add a single legend entry for the minimum value arrows
-        # plt.scatter([], [], color="black", marker="|", s=100, label="Min value")
 
         p_label = r"\infty" if p == float("inf") else str(p)
         plt.title(r"$\ell_{" + p_label + r"}$ Norm")
@@ -134,7 +129,7 @@ def plot_norms(
         plt.savefig(
             os.path.join(
                 plot_save_dir,
-                f"{run_name if plot_name is None else plot_name}_{p}-norms.pdf",
+                f"{run_name if plot_name is None else plot_name}{filename_suffix}.png",
             ),
             dpi=300,
         )
@@ -154,6 +149,7 @@ if __name__ == "__main__":
     parser.add_argument("--data_split", type=str, default="edm_imagenet64_all")
     parser.add_argument("--num_samples", type=int, default=1024)
     parser.add_argument("--p", type=int_or_float, default=2)
+    parser.add_argument("--compute_pixelwise", action="store_true")
     parser.add_argument("--plot_save_dir", type=str, default="final_plots/norms")
     parser.add_argument("--plot_name", type=str, default=None)
     parser.add_argument(
@@ -185,17 +181,19 @@ if __name__ == "__main__":
     # run_name = "-".join(class_list)
     n_classes = len(class_list)
     run_name = f"{n_classes}_classes"
+    filename_suffix = f"_p{args.p}_n{args.num_samples}_norms{'_pixelwise' if args.compute_pixelwise else ''}"
 
-    plot_norms(
-        save_dir,
-        class_list,
-        plot_save_dir,
-        args.p,
-        plot_separately=False,
-        plot_name=run_name,
-        use_log_scale=False,
-    )
-    exit()
+    # plot_norms(
+    #     save_dir,
+    #     filename_suffix,
+    #     class_list,
+    #     plot_save_dir,
+    #     args.p,
+    #     plot_separately=False,
+    #     plot_name=run_name,
+    #     use_log_scale=False,
+    # )
+    # exit()
 
     print(f"Computing norms for {run_name}...")
     data_dir = os.path.join(DATA_DIR, args.data_split)
@@ -205,25 +203,32 @@ if __name__ == "__main__":
     dataset.transform = transforms.ToTensor() if not is_npy_dataset else None
     print("Dataset setup complete.")
 
-    for target_class in args.target_classes:
+    for target_class in class_list:
         print(f"Computing norms for {target_class}")
         dataloader = build_dataloader_for_class(
             dataset, target_class, num_samples=args.num_samples
         )
-        image_norms = compute_norm_of_images(dataloader, p=args.p)
-        save_path = os.path.join(save_dir, f"{target_class}_{args.p}-norms.npy")
+        image_norms = compute_norm_of_images(
+            dataloader, p=args.p, compute_pixelwise=args.compute_pixelwise
+        )
+        save_path = os.path.join(
+            save_dir,
+            f"{target_class}{filename_suffix}.npy",
+        )
+        print("Saving computed norms to:", save_path)
         np.save(save_path, image_norms)
         print("Image norms shape:", image_norms.shape)
         print(
-            f"Average {args.p}-norm of {target_class} images': {np.mean(image_norms)}"
+            f"Average {'pixelwise ' if args.compute_pixelwise else ''}{args.p}-norm of {target_class} images': {np.mean(image_norms)}"
         )
 
     plot_norms(
         save_dir,
+        filename_suffix,
         class_list,
         plot_save_dir,
         args.p,
         plot_separately=False,
-        plot_name=args.plot_name,
+        plot_name=run_name,
         use_log_scale=False,
     )

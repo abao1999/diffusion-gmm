@@ -16,8 +16,10 @@ sampler:
   S_min: 0.05                         # stochastic min noise level
   S_max: 50                           # stochastic max noise level
   S_noise: 1.003                      # stochastic noise inflation
+  verbose: false                      
 
 snapshots:
   interval: 32               # snapshot interval
   save_dir: null             # directory for snapshot images
   n_images_to_save_per_batch: 1 # number of snapshot images to save per batch
+  save_snapshots_as_npy: false
