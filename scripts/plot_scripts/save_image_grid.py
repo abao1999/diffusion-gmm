@@ -24,12 +24,12 @@ def create_image_grid(
     """
     num_classes = len(image_paths)
     num_images_per_class = len(next(iter(image_paths.values())))
-
+    print(num_classes, num_images_per_class)
     if save_as_image:
         sample = Image.open(next(iter(image_paths.values()))[0])
         w, h = sample.size
         # Calculate the number of blocks needed per class
-        block_size = (4, 4)
+        block_size = (1, 6)
         n_blocks_per_row = 1
         # Calculate the total number of rows needed
         total_rows = (
@@ -45,6 +45,7 @@ def create_image_grid(
         )
 
         for class_idx, (class_name, paths) in enumerate(image_paths.items()):
+            print(class_name)
             for img_idx, img_path in enumerate(paths[: block_size[0] * block_size[1]]):
                 img = Image.open(img_path)
                 # Calculate position to paste the image in a block
@@ -146,5 +147,5 @@ if __name__ == "__main__":
     }
     print(image_paths)
     # save_path = os.path.join(args.save_dir, f"{args.data_split}_{class_names}_grid.pdf")
-    save_path = os.path.join(args.save_dir, f"sampling_{class_names}_grid.png")
+    save_path = os.path.join(args.save_dir, f"sampling_{class_names}_grid.pdf")
     create_image_grid(image_paths, save_path)

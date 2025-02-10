@@ -3,29 +3,31 @@ results_save_dir=results/classifier
 
 # experiment
 n_runs=1
-n_props_train=6
+n_props_train=1
 reset_model_random_seed=true
 
 # training
 num_epochs=600
 batch_size=64
-lr=2e-4
+lr=0.1
 
 # model and optimization
-model_class=LinearBinaryClassifier
+model_class=LinearMulticlassClassifier
 criterion=MSELoss
 optimizer_class=SGD
 scheduler_class=CosineAnnealingWarmRestarts
 
 # dataset
-train_split=0.8
-max_allowed_samples_per_class=8000
-n_train_samples_per_class=2048
+train_split=0.5
+max_allowed_samples_per_class=4096
+n_train_samples_per_class=1024
 n_test_samples_per_class=1024
 
 class_list=(
-    "goldfinch"
-    "trimaran"
+    "church"
+    "tench"
+    "english_springer"
+    "french_horn"
 )
 
 class_list_json=$(printf '%s\n' "${class_list[@]}" | jq -R . | jq -s -c .)
@@ -38,7 +40,7 @@ else
 fi
 echo $run_name
 
-dataset_list=("gmm_edm_imagenet64_all" "edm_imagenet64_all")
+dataset_list=("edm2_representations" "gmm_edm2_representations")
 
 # run
 datetime=$(date +%m-%d_%H-%M-%S)

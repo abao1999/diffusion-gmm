@@ -84,6 +84,19 @@ class StackedRandomGenerator:
             [torch.randn(size[1:], generator=gen, **kwargs) for gen in self.generators]
         )
 
+    def chi_squared(self, size, dof, **kwargs):
+        assert size[0] == len(self.generators)
+        # Generate chi-squared samples by summing the squares of 'dof' Gaussian samples
+        return torch.stack(
+            [
+                torch.sum(
+                    torch.randn([dof] + size[1:], generator=gen, **kwargs) ** 2,
+                    dim=0,
+                )
+                for gen in self.generators
+            ]
+        )
+
     def randn_like(self, input):
         return self.randn(
             input.shape, dtype=input.dtype, layout=input.layout, device=input.device
@@ -274,10 +287,26 @@ def main(cfg: DictConfig):
 
         # Pick latents and labels.
         rnd = StackedRandomGenerator(cfg.edm.device, batch_seeds)
-        latents = rnd.randn(
+        gaussian_samples = rnd.randn(
             [batch_size, net.img_channels, net.img_resolution, net.img_resolution],
             device=cfg.edm.device,
         )
+
+        if cfg.base_dist.name == "student_t":
+            new_batch_seeds = 2 * batch_seeds
+            rnd2 = StackedRandomGenerator(cfg.edm.device, new_batch_seeds)
+            chi2_samples = rnd2.chi_squared(
+                [batch_size, net.img_channels, net.img_resolution, net.img_resolution],
+                dof=cfg.base_dist.dof,
+                device=cfg.edm.device,
+            )
+            # construct student-t samples
+            latents = gaussian_samples / torch.sqrt(chi2_samples / cfg.base_dist.dof)
+        elif cfg.base_dist.name == "gaussian":
+            latents = gaussian_samples
+        else:
+            raise ValueError(f"Unknown base distribution: {cfg.base_dist.name}")
+
         class_labels = None
         if net.label_dim:
             class_labels = torch.eye(net.label_dim, device=cfg.edm.device)[

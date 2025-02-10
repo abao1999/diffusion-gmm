@@ -55,6 +55,7 @@ def plot_norms(
     plot_separately: bool = False,
     plot_name: Optional[str] = None,
     use_log_scale: bool = False,
+    cmap: str = "tab10",
 ):
     os.makedirs(plot_save_dir, exist_ok=True)
     run_name = "-".join(class_list)
@@ -87,16 +88,14 @@ def plot_norms(
         plt.savefig(
             os.path.join(
                 plot_save_dir,
-                f"{run_name if plot_name is None else plot_name}{filename_suffix}_separate.png",
+                f"{run_name if plot_name is None else plot_name}{filename_suffix}_separate.pdf",
             ),
             dpi=300,
         )
         plt.close()
     else:
         # Choose a colormap and extract 10 colors from it
-        colormap = cm.get_cmap(
-            "tab10", 10
-        )  # 'tab10' is a colormap with 10 distinct colors
+        colormap = cm.get_cmap(cmap, len(class_list))
         colors = [mcolors.rgb2hex(colormap(i)) for i in range(colormap.N)]
 
         print("colors:", colors)
@@ -129,7 +128,7 @@ def plot_norms(
         plt.savefig(
             os.path.join(
                 plot_save_dir,
-                f"{run_name if plot_name is None else plot_name}{filename_suffix}.png",
+                f"{run_name if plot_name is None else plot_name}{filename_suffix}.pdf",
             ),
             dpi=300,
         )
@@ -164,17 +163,39 @@ if __name__ == "__main__":
     os.makedirs(save_dir, exist_ok=True)
 
     if args.target_classes == ["all"]:
+        # class_list = [
+        #     "baseball",
+        #     "church",
+        #     "english_springer",
+        #     "french_horn",
+        #     "garbage_truck",
+        #     "goldfinch",
+        #     "kimono",
+        #     "salamandra",
+        #     "tabby",
+        #     "tench",
+        # ]
         class_list = [
             "baseball",
+            "cauliflower",
             "church",
+            "coral_reef",
             "english_springer",
             "french_horn",
             "garbage_truck",
             "goldfinch",
             "kimono",
+            "mountain_bike",
+            "patas_monkey",
+            "pizza",
+            "planetarium",
+            "polaroid",
+            "racer",
             "salamandra",
             "tabby",
             "tench",
+            "trimaran",
+            "volcano",
         ]
     else:
         class_list = args.target_classes
@@ -192,6 +213,7 @@ if __name__ == "__main__":
     #     plot_separately=False,
     #     plot_name=run_name,
     #     use_log_scale=False,
+    #     cmap="tab20",
     # )
     # exit()
 
@@ -231,4 +253,5 @@ if __name__ == "__main__":
         plot_separately=False,
         plot_name=run_name,
         use_log_scale=False,
+        cmap="tab20",
     )

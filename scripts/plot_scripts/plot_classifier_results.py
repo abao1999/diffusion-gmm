@@ -29,9 +29,9 @@ def plot_quantity(
     for i, (run_name, quantity_dict) in enumerate(results.items()):
         print(f"Processing {run_name}")
         num_train_splits = len(quantity_dict)
-        assert num_train_splits == len(
-            quantity_dict
-        ), "Number of runs must match number of quantities"
+        assert num_train_splits == len(quantity_dict), (
+            "Number of runs must match number of quantities"
+        )
         print("num_train_splits: ", num_train_splits)
 
         n_train_per_class_list = list(quantity_dict.keys())
@@ -208,7 +208,7 @@ if __name__ == "__main__":
         run_json_paths,
         # num_classes=n_classes,
         title="Linear Classifier",
-        save_dir="final_plots/classifier",
+        save_dir="final_plots/classifier_remake",
         save_name=save_name,
         plot_best_acc=True,
         # sample_splits_to_exclude=[512, 128, 1024],

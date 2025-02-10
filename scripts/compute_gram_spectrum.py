@@ -217,10 +217,35 @@ def compute_and_save_gramian_eigs(
     return gramian_eigs
 
 
+def compute_and_save_gramian_eigs_svd(
+    X: np.ndarray,
+    save_dir: str,
+    save_name: str,
+    k_eigvec_to_save: int = 0,
+) -> Tuple[np.ndarray, np.ndarray]:
+    U, S, Vt = np.linalg.svd(X, full_matrices=True)
+    eigenvectors = U[:, :k_eigvec_to_save]
+    print(f"shape of first {k_eigvec_to_save} eigenvectors: {eigenvectors.shape}")
+    eigenvalues = S**2
+    eigenvalue_save_path = os.path.join(
+        save_dir,
+        f"{save_name}_gramian_eigenvalues.npy",
+    )
+    eigenvector_save_path = os.path.join(
+        save_dir,
+        f"{save_name}_gramian_eigenvectors.npy",
+    )
+    np.save(eigenvalue_save_path, eigenvalues)
+    np.save(eigenvector_save_path, eigenvectors)
+    print(f"Saved gramian eigenvalues to {eigenvalue_save_path}")
+    print(f"Saved gramian eigenvectors to {eigenvector_save_path}")
+    return eigenvectors, eigenvalues
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--target_classes", type=str, nargs="+", required=True)
-    parser.add_argument("--data_split", type=str, default="representations")
+    parser.add_argument("--data_split", type=str, default="edm_imagenet64_all")
     parser.add_argument("--n_samples_per_class", type=int, default=1024)
     parser.add_argument(
         "--plot_save_dir", type=str, default="final_plots/gram_spectrum"
@@ -320,8 +345,11 @@ if __name__ == "__main__":
         X_matrix = np.concatenate(X_matrix, axis=0)
         print(f"shape of X_matrix: {X_matrix.shape}")
         print(f"Computing gramian eigenvalues for {class_name}")
-        _ = compute_and_save_gramian_eigs(
-            X_matrix, save_dir, f"{class_name}_n{args.n_samples_per_class}"
+        _ = compute_and_save_gramian_eigs_svd(
+            X_matrix,
+            save_dir,
+            f"{class_name}_n{args.n_samples_per_class}",
+            k_eigvec_to_save=10,
         )
         X_matrix = []
 
@@ -331,8 +359,9 @@ if __name__ == "__main__":
         print(f"shape of X_matrix: {X_matrix.shape}")
         print("Computing gramian eigenvalues for mixture")
         print(f"shape of final X_matrix: {X_matrix.shape}")
-        _ = compute_and_save_gramian_eigs(
+        _ = compute_and_save_gramian_eigs_svd(
             X_matrix,
             save_dir,
             f"{n_classes}classes_mixture_n{args.n_samples_per_class}",
+            k_eigvec_to_save=10,
         )

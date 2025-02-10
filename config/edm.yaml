@@ -7,10 +7,14 @@ edm:
   max_batch_size: 64                  # maximum batch size
   device: cuda                        # device
 
+base_dist:
+  name: gaussian
+  dof: 3
+
 sampler:
   num_steps: 256                      # number of sampling steps
   sigma_min: 0.002                    # lowest noise level
-  sigma_max: 80                        # highest noise level
+  sigma_max: 80                       # highest noise level
   rho: 7                              # time step exponent
   S_churn: 40                         # stochasticity strength
   S_min: 0.05                         # stochastic min noise level
@@ -23,3 +27,30 @@ snapshots:
   save_dir: null             # directory for snapshot images
   n_images_to_save_per_batch: 1 # number of snapshot images to save per batch
   save_snapshots_as_npy: false
+
+
+edm2:
+  preset: edm2-img512-l-guid-dino
+  net: null
+  gnet: null
+  outdir: /stor/work/AMDG_Gilpin_Summer2024/vision_datasets/edm2_imagenet512
+  subdirs: false
+  seeds: "0-15"
+  class_idx: null
+  max_batch_size: 32
+  
+  num_steps: 32
+  sigma_min: 0.002
+  sigma_max: 80
+  rho: 7
+  guidance: null
+  S_churn: 0
+  S_min: 0
+  S_max: inf
+  S_noise: 1
+
+  snapshot_interval: 4
+  snapshot_save_dir: null
+  n_images_save: 32 # per batch
+  save_snapshots_as_npy: true
+  verbose: true

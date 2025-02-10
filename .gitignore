@@ -22,6 +22,8 @@ notebooks/
 nohup.out
 *.pkl
 
+*_debug.py
+
 
 # output and logging files
 output/
