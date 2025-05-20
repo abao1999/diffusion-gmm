@@ -11,7 +11,7 @@ $ pip install -e .
 ## Citation
 If you use this codebase or otherwise find our work valuable, please cite us:
 ```
-@misc{ghane2025concentrationmeasuredistributionsgenerated,
+@misc{ghane2025_com_diffusion,
       title={Concentration of Measure for Distributions Generated via Diffusion Models}, 
       author={Reza Ghane and Anthony Bao and Danil Akhtiamov and Babak Hassibi},
       year={2025},
